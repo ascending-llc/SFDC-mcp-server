@@ -1,3 +1,5 @@
+//http-server.ts
+
 /*
  * Copyright 2025, Salesforce, Inc.
  *
@@ -21,6 +23,7 @@ import { Toolset } from '@salesforce/mcp-provider-api';
 import { SfMcpServer } from './sf-mcp-server.js';
 import { Services } from './services.js';
 import { registerToolsets } from './utils/registry-utils.js';
+import { salesforceOAuthMiddleware } from './middleware/oauth-middleware.js';
 import Cache from './utils/cache.js';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -77,6 +80,8 @@ export async function startHttpServer(options: {
     console.error(`[${timestamp}] ${req.method} ${req.path} - Session: ${req.headers['mcp-session-id'] || 'none'}`);
     next();
   });
+
+  app.use('/mcp', salesforceOAuthMiddleware);
 
   // Health check endpoint
   app.get('/health', (_req, res) => {

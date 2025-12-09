@@ -31,6 +31,9 @@ ENV NODE_ENV=production \
 RUN groupadd -r app && useradd -r -g app -d /app app
 COPY --from=build --chown=app:app /app /app
 
+# Create Salesforce CLI config directory with proper permissions
+RUN mkdir -p /app/.sf && chown -R app:app /app/.sf
+
 USER app
 EXPOSE 3336
 

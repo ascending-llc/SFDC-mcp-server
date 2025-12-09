@@ -1,5 +1,7 @@
 import { type Connection } from '@salesforce/core';
 import { type OrgConfigInfo, type SanitizedOrgAuthorization } from './types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 
 export interface Services {
   getTelemetryService(): TelemetryService;
@@ -19,7 +21,7 @@ export type TelemetryEvent = {
 export interface OrgService {
   getAllowedOrgUsernames(): Promise<Set<string>>;
   getAllowedOrgs(): Promise<SanitizedOrgAuthorization[]>;
-  getConnection(username: string): Promise<Connection>;
+  getConnection(username: string, extra?: RequestHandlerExtra<ServerRequest, ServerNotification>): Promise<Connection>;
   getDefaultTargetOrg(): Promise<OrgConfigInfo | undefined>;
   getDefaultTargetDevHub(): Promise<OrgConfigInfo | undefined>;
   findOrgByUsernameOrAlias(

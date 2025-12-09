@@ -50,3 +50,6 @@ node_modules
 /Library
 
 .cursor
+
+# Claude Code documentation
+CLAUDE.md

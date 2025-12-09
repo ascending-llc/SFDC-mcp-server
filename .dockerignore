@@ -1,0 +1,44 @@
+# Version control
+.git
+.gitignore
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build artifacts
+dist
+build
+lib
+**/dist
+**/build
+packages/*/lib
+*.tsbuildinfo
+**/tsconfig.tsbuildinfo
+
+# Yarn
+.yarn/cache
+.yarn/install-state.gz
+.pnp.*
+
+# Archives
+*.tgz
+
+# Logs
+*.log
+yarn-error.log
+npm-debug.log
+
+# IDE & OS
+.DS_Store
+.vscode
+.idea
+
+# Test & coverage
+coverage
+.nyc_output
+
+# Docs (optional - remove if you need docs in container)
+Docs
+*.md
+!README.md

@@ -16,7 +16,8 @@
 
 import { z } from 'zod';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
-import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolResult, ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam, useToolingApiParam } from '../shared/params.js';
 
@@ -74,7 +75,10 @@ export class QueryOrgMcpTool extends McpTool<InputArgsShape, OutputArgsShape> {
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
       if (!input.usernameOrAlias)
         return textResponse(
@@ -82,7 +86,8 @@ export class QueryOrgMcpTool extends McpTool<InputArgsShape, OutputArgsShape> {
           true,
         );
       process.chdir(input.directory);
-      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+      // Pass extra parameter to enable OAuth authentication
+      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
       const result = input.useToolingApi
         ? await connection.tooling.query(input.query)
         : await connection.query(input.query);

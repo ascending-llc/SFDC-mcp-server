@@ -17,6 +17,9 @@
 import { AuthInfo, Connection, ConfigAggregator, OrgConfigProperties, type OrgAuthorization } from '@salesforce/core';
 import { type OrgConfigInfo, type SanitizedOrgAuthorization } from '@salesforce/mcp-provider-api';
 import Cache from './cache.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
+import { createOAuthConnection } from './auth-helper.js';
 
 /**
  * Sanitizes org authorization data by filtering out sensitive fields
@@ -40,21 +43,41 @@ export function sanitizeOrgs(orgs: OrgAuthorization[]): SanitizedOrgAuthorizatio
 }
 
 // This function is the main entry point for Tools to get an allowlisted Connection
-export async function getConnection(username: string): Promise<Connection> {
-  // We get all allowed orgs each call in case the directory has changed (default configs)
-  const allOrgs = await getAllAllowedOrgs();
-  const foundOrg = findOrgByUsernameOrAlias(allOrgs, username);
+export async function getConnection(
+  username: string,
+  extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+): Promise<Connection> {
 
-  if (!foundOrg)
-    return Promise.reject(
-      new Error(
-        'No org found with the provided username/alias. Ask the user to specify one or check their MCP Server startup config.'
-      )
-    );
+  // Prioritize OAuth connection from extra parameter if available
+  if (extra) {
+    const oauthConnection = await createOAuthConnection(extra);
+    if (oauthConnection) {
+      console.error(`[OAuth] ✅ Using OAuth connection from request context`);
+      return oauthConnection;
+    }
+    console.error(`[OAuth] ⚠️  No OAuth context found in request, falling back to CLI auth`);
+  }
 
-  const authInfo = await AuthInfo.create({ username: foundOrg.username });
-  const connection = await Connection.create({ authInfo });
-  return connection;
+  // CLI fallback: username-based connection from local auth
+  if (username) {
+    const allOrgs = await getAllAllowedOrgs();
+    const foundOrg = findOrgByUsernameOrAlias(allOrgs, username);
+
+    if (!foundOrg)
+      return Promise.reject(
+        new Error(
+          'No org found with the provided username/alias. Ask the user to specify one or check their MCP Server startup config.'
+        )
+      );
+
+    console.error(`[Auth] Using CLI auth for org: ${foundOrg.username}`);
+    const authInfo = await AuthInfo.create({ username: foundOrg.username });
+    const connection = await Connection.create({ authInfo });
+    return connection;
+  }
+
+  throw new Error('No authentication available. Provide usernameOrAlias or OAuth token.');
+
 }
 
 export function findOrgByUsernameOrAlias(
