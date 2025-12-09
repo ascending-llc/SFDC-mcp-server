@@ -12,7 +12,8 @@
     "sourceMap": true,
     "strict": true,
     "target": "ES2022",
-    "removeComments": false
+    "removeComments": false,
+    "skipLibCheck": true
   },
   "include": ["./src/**/*"],
   "exclude": ["./src/**/*.test.ts", "./src/**/*.spec.ts", "./node_modules", "./dist"]

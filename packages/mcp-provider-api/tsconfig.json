@@ -7,13 +7,15 @@
     "declaration": true,
     "esModuleInterop": true,
     "lib": [
-      "ES2022"
+      "ES2022",
+      "DOM"
     ],
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "sourceMap": true,
     "strict": true,
-    "target": "ESNEXT"
+    "target": "ESNEXT",
+    "skipLibCheck": true
   },
   "include": [
     "./src",

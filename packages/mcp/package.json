@@ -55,11 +55,16 @@
     "@salesforce/source-tracking": "^7.4.8",
     "@salesforce/telemetry": "^6.2.6",
     "@salesforce/ts-types": "^2.0.11",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
     "@salesforce/cli-plugins-testkit": "^5.3.39",
     "@salesforce/dev-config": "^4.3.2",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
     "prettier": "^2.8.8",
     "@types/node": "^22.16.5",
     "wireit": "^0.14.12",

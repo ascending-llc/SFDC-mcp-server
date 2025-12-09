@@ -7,7 +7,7 @@
       "packages/*"
     ],
     "nohoist": [
-      "**"
+      "**/mcp-provider-code-analyzer/**"
     ]
   },
   "devDependencies": {
@@ -15,6 +15,10 @@
     "@commitlint/cli": "^19.0.0",
     "@commitlint/config-conventional": "^19.0.0",
     "rimraf": "^6.0.1"
+  },
+  "resolutions": {
+    "@types/eventsource": "1.1.11",
+    "@modelcontextprotocol/sdk": "1.18.2"
   },
   "overrides": {
     "@salesforce/core": "^8.22.0"
