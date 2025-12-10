@@ -21,6 +21,8 @@ import { Duration } from '@salesforce/kit';
 import { MetadataApiDeploy } from '@salesforce/source-deploy-retrieve';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { ensureString } from '@salesforce/ts-types';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
@@ -104,7 +106,10 @@ Report on my org snapshot`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     if (!input.jobId) {
       return textResponse('The jobId parameter is required.', true);
     }
@@ -120,7 +125,7 @@ Report on my org snapshot`,
       );
 
     process.chdir(input.directory);
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
 
     switch (input.jobId.substring(0, 3)) {
       case resumableIdPrefixes.get('deploy'):

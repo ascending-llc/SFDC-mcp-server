@@ -17,6 +17,8 @@
 import { z } from 'zod';
 import { McpTool, McpToolConfig, OrgConfigInfo, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { type OrgService } from '@salesforce/mcp-provider-api';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam } from '../shared/params.js';
@@ -125,7 +127,10 @@ If it's not clear which type of org to resolve, set both defaultTargetOrg and de
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
       process.chdir(input.directory);
 

@@ -19,6 +19,8 @@ import { AgentTester } from '@salesforce/agents';
 import { Duration } from '@salesforce/kit';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
 
@@ -93,7 +95,10 @@ start myAgentTest and don't wait for results`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     if (!input.usernameOrAlias)
       return textResponse(
         'The usernameOrAlias parameter is required, if the user did not specify one use the #get_username tool',
@@ -102,7 +107,7 @@ start myAgentTest and don't wait for results`,
 
     // needed for org allowlist to work
     process.chdir(input.directory);
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
 
     try {
       const agentTester = new AgentTester(connection);

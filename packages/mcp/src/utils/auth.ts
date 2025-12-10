@@ -48,14 +48,20 @@ export async function getConnection(
   extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
 ): Promise<Connection> {
 
+  console.error(`[Auth] 🔍 getConnection called - checking for OAuth context in request`);
+
   // Prioritize OAuth connection from extra parameter if available
   if (extra) {
+    console.error(`[Auth] 🔐 'extra' parameter present, attempting OAuth connection`);
+
     const oauthConnection = await createOAuthConnection(extra);
     if (oauthConnection) {
       console.error(`[OAuth] ✅ Using OAuth connection from request context`);
       return oauthConnection;
     }
     console.error(`[OAuth] ⚠️  No OAuth context found in request, falling back to CLI auth`);
+  } else {
+    console.error(`[Auth] ℹ️  No 'extra' parameter provided, will use CLI auth`);
   }
 
   // CLI fallback: username-based connection from local auth

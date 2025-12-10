@@ -78,6 +78,18 @@ export async function startHttpServer(options: {
   app.use((req, _res, next) => {
     const timestamp = new Date().toISOString();
     console.error(`[${timestamp}] ${req.method} ${req.path} - Session: ${req.headers['mcp-session-id'] || 'none'}`);
+
+    // Log auth headers at entry point
+    const authHeader = req.headers['authorization'];
+    const instanceHeader = req.headers['x-salesforce-instance-url'];
+    if (authHeader) {
+      const isBearerToken = typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ');
+      const tokenLength = isBearerToken ? authHeader.substring(7).length : 'N/A';
+      console.error(`[${timestamp}] 🔐 Auth headers - Authorization: ${isBearerToken ? 'Bearer token (length: ' + tokenLength + ')' : 'present but not Bearer'}, Instance URL: ${instanceHeader || 'not provided'}`);
+    } else {
+      console.error(`[${timestamp}] ⚠️  No Authorization header in request`);
+    }
+
     next();
   });
 

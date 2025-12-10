@@ -18,6 +18,8 @@ import { z } from 'zod';
 import { Org, StateAggregator, User } from '@salesforce/core';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
 
@@ -94,7 +96,10 @@ export class AssignPermissionSetMcpTool extends McpTool<InputArgsShape, OutputAr
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
       if (!input.usernameOrAlias)
         return textResponse(
@@ -103,7 +108,7 @@ export class AssignPermissionSetMcpTool extends McpTool<InputArgsShape, OutputAr
         );
       process.chdir(input.directory);
       // We build the connection from the usernameOrAlias
-      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
 
       // We need to clear the instance so we know we have the most up to date aliases
       // If a user sets an alias after server start up, it was not getting picked up

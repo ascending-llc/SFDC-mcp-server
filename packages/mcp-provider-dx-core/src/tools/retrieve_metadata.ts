@@ -22,6 +22,8 @@ import { ensureString } from '@salesforce/ts-types';
 import { Duration } from '@salesforce/kit';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
 
@@ -94,7 +96,10 @@ Retrieve X metadata from my org`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     if (input.sourceDir && input.manifest) {
       return textResponse("You can't specify both `sourceDir` and `manifest` parameters.", true);
     }
@@ -108,7 +113,7 @@ Retrieve X metadata from my org`,
     // needed for org allowlist to work
     process.chdir(input.directory);
 
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
     const project = await SfProject.resolve(input.directory);
 
     const org = await Org.create({ connection });

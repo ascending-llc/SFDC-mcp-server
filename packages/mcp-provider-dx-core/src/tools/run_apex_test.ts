@@ -20,6 +20,8 @@ import { ApexTestResultOutcome } from '@salesforce/apex-node/lib/src/tests/types
 import { Duration, ensureArray } from '@salesforce/kit';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
 
@@ -131,7 +133,10 @@ What are the results for 707XXXXXXXXXXXX`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     if (
       (ensureArray(input.suiteName).length >= 1 ||
         ensureArray(input.methodNames).length >= 1 ||
@@ -150,7 +155,7 @@ What are the results for 707XXXXXXXXXXXX`,
     // needed for org allowlist to work
     process.chdir(input.directory);
 
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
     try {
       const testService = new TestService(connection);
       let result: TestResult | TestRunIdResult;

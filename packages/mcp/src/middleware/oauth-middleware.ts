@@ -47,15 +47,7 @@ export function salesforceOAuthMiddleware(req: Request, res: Response, next: Nex
   }
 
   // Skip authentication for MCP protocol methods (don't require Salesforce access)
-  const skipAuthMethods = [
-    'ping',
-    'initialize',
-    'notifications/initialized',
-    'notifications/cancelled',
-    'tools/list',           // Can list available tools without auth
-    'resources/list',
-    'prompts/list'
-  ];
+  const skipAuthMethods = ["ping", "initialize"];
 
   const method = req.body?.method;
   const requestId = req.body?.id ?? 'unknown';
@@ -66,6 +58,13 @@ export function salesforceOAuthMiddleware(req: Request, res: Response, next: Nex
   }
 
   console.error(`[OAuth Middleware] [Request ${requestId}] 🔐 Validating auth for method: ${method}`);
+
+  // Log header presence for debugging
+  const authHeaderPresent = !!req.headers['authorization'];
+  const instanceUrlPresent = !!req.headers['x-salesforce-instance-url'];
+  console.error(
+    `[OAuth Middleware] [Request ${requestId}] 📋 Headers present - Authorization: ${authHeaderPresent}, X-Salesforce-Instance-URL: ${instanceUrlPresent}`
+  );
 
   // Extract Bearer token from Authorization header (normalize string | string[])
   const authHeader = getHeaderValue(req, 'authorization');
@@ -95,6 +94,10 @@ export function salesforceOAuthMiddleware(req: Request, res: Response, next: Nex
   }
 
   const accessToken = authHeader.substring(7).trim(); // Remove "Bearer "
+
+  console.error(
+    `[OAuth Middleware] [Request ${requestId}] ✅ Bearer token extracted successfully (length: ${accessToken.length})`
+  );
 
   if (!accessToken) {
     console.error(`[OAuth Middleware] [Request ${requestId}] ❌ Empty access token in Authorization header`);
@@ -129,7 +132,16 @@ export function salesforceOAuthMiddleware(req: Request, res: Response, next: Nex
 
   (req as any).salesforceAuth = authContext;
 
+  console.error(
+    `[OAuth Middleware] [Request ${requestId}] ✅ Auth context attached to request:`,
+    {
+      hasAccessToken: !!authContext.accessToken,
+      tokenLength: authContext.accessToken?.length,
+      instanceUrl: authContext.instanceUrl || 'to-be-derived',
+      hasUserId: !!authContext.userId
+    }
+  );
+
   next();
 }
-
 

@@ -18,6 +18,8 @@ import { z } from 'zod';
 import { Org } from '@salesforce/core';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 
@@ -84,14 +86,17 @@ create a snapshot of my MyScratch in myDevHub`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
       process.chdir(input.directory);
 
-      const connection = await this.services.getOrgService().getConnection(input.sourceOrg);
+      const connection = await this.services.getOrgService().getConnection(input.sourceOrg, extra);
 
       const sourceOrgId = (await Org.create({ connection })).getOrgId();
-      const devHubConnection = await this.services.getOrgService().getConnection(input.devHub);
+      const devHubConnection = await this.services.getOrgService().getConnection(input.devHub, extra);
       const createResponse = await devHubConnection.sobject('OrgSnapshot').create({
         SourceOrg: sourceOrgId,
         Description: input.description,

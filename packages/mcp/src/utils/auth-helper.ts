@@ -43,6 +43,10 @@ async function deriveInstanceUrlFromToken(accessToken: string): Promise<string |
   try {
     console.error(`[OAuth] 🔍 Deriving instance URL from token via userinfo endpoint (stateless)`);
 
+    console.error(
+      `[OAuth] 🌐 Fetching https://login.salesforce.com/services/oauth2/userinfo with Bearer token (length: ${accessToken.length})`
+    );
+
     // Call Salesforce userinfo endpoint
     const response = await fetch('https://login.salesforce.com/services/oauth2/userinfo', {
       headers: {
@@ -51,8 +55,17 @@ async function deriveInstanceUrlFromToken(accessToken: string): Promise<string |
       }
     });
 
+    console.error(
+      `[OAuth] 📡 Userinfo API response: ${response.status} ${response.statusText}`
+    );
+
     if (!response.ok) {
       console.error(`[OAuth] ❌ Userinfo call failed: ${response.status} ${response.statusText}`);
+
+      // Log response body for debugging
+      const errorBody = await response.text();
+      console.error(`[OAuth] ❌ Error response body:`, errorBody.substring(0, 200));
+
       return undefined;
     }
 
@@ -103,6 +116,13 @@ export async function getAuthContext(
   // Extract headers from MCP SDK's requestInfo structure
   const headers = extra?.requestInfo?.headers;
 
+  if (headers) {
+    const headerKeys = Object.keys(headers);
+    console.error(`[OAuth] 📥 Received headers from MCP SDK: ${headerKeys.join(', ')}`);
+  } else {
+    console.error(`[OAuth] ⚠️  No headers found in MCP SDK request context`);
+  }
+
   if (!headers) {
     return undefined;
   }
@@ -114,6 +134,11 @@ export async function getAuthContext(
   }
 
   const accessToken = authHeader.substring(7).trim(); // Remove "Bearer "
+
+  console.error(
+    `[OAuth] ✅ Bearer token extracted from Authorization header (length: ${accessToken.length})`
+  );
+
   if (!accessToken) {
     return undefined;
   }
@@ -124,6 +149,9 @@ export async function getAuthContext(
   // If no header provided, derive from token via userinfo API (slow path)
   if (!instanceUrl) {
     console.error(`[OAuth] ⚠️  X-Salesforce-Instance-URL header missing, deriving from token`);
+    console.error(
+      `[OAuth] 🔗 Calling Salesforce userinfo API to derive instance URL (token length: ${accessToken.length})`
+    );
     instanceUrl = await deriveInstanceUrlFromToken(accessToken);
 
     if (!instanceUrl) {
@@ -154,8 +182,13 @@ export async function createOAuthConnection(
   const authContext = await getAuthContext(extra);
 
   if (!authContext) {
+    console.error(`[OAuth] ❌ No auth context available from request, cannot create OAuth connection`);
     return undefined;
   }
+
+  console.error(
+    `[OAuth] ✅ Auth context retrieved - Instance: ${authContext.instanceUrl}, Token length: ${authContext.accessToken.length}`
+  );
 
   // Create AuthInfo from OAuth access token (in-memory, not persisted)
   // accessTokenOptions is designed for already-issued tokens from external OAuth flows
@@ -166,6 +199,8 @@ export async function createOAuthConnection(
       instanceUrl: authContext.instanceUrl,
     },
   });
+
+  console.error(`[OAuth] 🔗 Created AuthInfo from OAuth token for instance: ${authContext.instanceUrl}`);
 
   // Create Salesforce Connection with AuthInfo
   const connection = await Connection.create({ authInfo });

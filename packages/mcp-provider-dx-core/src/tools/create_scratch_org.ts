@@ -20,6 +20,8 @@ import { z } from 'zod';
 import { Org, scratchOrgCreate, ScratchOrgCreateOptions } from '@salesforce/core';
 import { Duration } from '@salesforce/kit';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { ensureString } from '@salesforce/ts-types/lib/narrowing/ensure.js';
 import { textResponse } from '../shared/utils.js';
@@ -128,14 +130,17 @@ create a scratch org aliased as MyNewOrg and set as default and don't wait for i
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
       process.chdir(input.directory);
 
       // NOTE: 
       // this should be:
       // ```ts
-      // const connection = await this.services.getOrgService().getConnection(input.devHub);
+      // const connection = await this.services.getOrgService().getConnection(input.devHub, extra);
       // const hubOrProd = await Org.create({ connection });
       // ```
       //
