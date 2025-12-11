@@ -22,6 +22,7 @@ import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
+import fs from 'node:fs';
 
 /*
  * Assign permission set
@@ -101,14 +102,24 @@ export class AssignPermissionSetMcpTool extends McpTool<InputArgsShape, OutputAr
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
     try {
-      if (!input.usernameOrAlias)
+      if (input.directory && fs.existsSync(input.directory)) {
+        process.chdir(input.directory);
+      } else if (input.directory) {
+        console.error(
+          `[assign_permission_set] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`
+        );
+      }
+
+      if (!extra) {
+        console.error(`[assign_permission_set] ❌ No OAuth context provided`);
         return textResponse(
-          'The usernameOrAlias parameter is required, if the user did not specify one use the #get_username tool',
+          'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
           true,
         );
-      process.chdir(input.directory);
+      }
+
       // We build the connection from the usernameOrAlias
-      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
+      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
 
       // We need to clear the instance so we know we have the most up to date aliases
       // If a user sets an alias after server start up, it was not getting picked up

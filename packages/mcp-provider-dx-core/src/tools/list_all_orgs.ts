@@ -21,6 +21,7 @@ import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam } from '../shared/params.js';
+import fs from 'node:fs';
 
 /*
  * List all Salesforce orgs
@@ -85,9 +86,30 @@ List all orgs`,
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
     try {
-      process.chdir(input.directory);
-      const orgs = await this.services.getOrgService().getAllowedOrgs();
-      return textResponse(`List of configured Salesforce orgs:\n\n${JSON.stringify(orgs, null, 2)}`);
+      // If directory exists, change to it; otherwise continue without failing
+      if (input.directory && fs.existsSync(input.directory)) {
+        process.chdir(input.directory);
+      } else if (input.directory) {
+        console.error(`[list_all_orgs] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`);
+      }
+
+      // OAuth-only mode: require extra parameter with OAuth context
+      if (!extra) {
+        console.error(`[list_all_orgs] ❌ No OAuth context provided`);
+        return textResponse(
+          'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
+          true
+        );
+      }
+
+      // In OAuth-only mode, list the org tied to the current token
+      const connection = await this.services.getOrgService().getConnection('', extra);
+      const username = connection.getUsername();
+      const instanceUrl = connection.instanceUrl ?? 'unknown-instance';
+
+      return textResponse(
+        `Org(s) available via current OAuth token:\n- username: ${username}\n- instance: ${instanceUrl}`
+      );
     } catch (error) {
       return textResponse(`Failed to list orgs: ${error instanceof Error ? error.message : 'Unknown error'}`, true);
     }

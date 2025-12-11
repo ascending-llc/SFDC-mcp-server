@@ -27,6 +27,7 @@ import { ensureString } from '@salesforce/ts-types';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { type ToolTextResponse } from '../shared/types.js';
+import fs from 'node:fs';
 
 const resumableIdPrefixes = new Map<string, string>([
   ['deploy', '0Af'],
@@ -110,6 +111,23 @@ Report on my org snapshot`,
     input: InputArgs,
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
+    // Safe chdir
+    if (input.directory && fs.existsSync(input.directory)) {
+      process.chdir(input.directory);
+    } else if (input.directory) {
+      console.error(
+        `[resume_tool_operation] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`
+      );
+    }
+
+    if (!extra) {
+      console.error(`[resume_tool_operation] ❌ No OAuth context provided`);
+      return textResponse(
+        'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
+        true,
+      );
+    }
+
     if (!input.jobId) {
       return textResponse('The jobId parameter is required.', true);
     }
@@ -118,14 +136,7 @@ Report on my org snapshot`,
       return textResponse('The jobId parameter is not a valid Salesforce id.', true);
     }
 
-    if (!input.usernameOrAlias)
-      return textResponse(
-        'The usernameOrAlias parameter is required, if the user did not specify one use the #get_username tool',
-        true,
-      );
-
-    process.chdir(input.directory);
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
 
     switch (input.jobId.substring(0, 3)) {
       case resumableIdPrefixes.get('deploy'):

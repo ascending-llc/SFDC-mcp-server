@@ -20,6 +20,7 @@ import { CallToolResult, ServerRequest, ServerNotification } from '@modelcontext
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam, useToolingApiParam } from '../shared/params.js';
+import fs from 'node:fs';
 
 /*
  * Query Salesforce org
@@ -80,14 +81,24 @@ export class QueryOrgMcpTool extends McpTool<InputArgsShape, OutputArgsShape> {
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
     try {
-      if (!input.usernameOrAlias)
+      // Safe chdir (avoid ENOENT)
+      if (input.directory && fs.existsSync(input.directory)) {
+        process.chdir(input.directory);
+      } else if (input.directory) {
+        console.error(`[run_soql_query] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`);
+      }
+
+      // OAuth-only mode: require extra parameter with OAuth context
+      if (!extra) {
+        console.error(`[run_soql_query] ❌ No OAuth context provided`);
         return textResponse(
-          'The usernameOrAlias parameter is required, if the user did not specify one use the #get_username tool',
+          'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
           true,
         );
-      process.chdir(input.directory);
+      }
+
       // Pass extra parameter to enable OAuth authentication
-      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
+      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
       const result = input.useToolingApi
         ? await connection.tooling.query(input.query)
         : await connection.query(input.query);

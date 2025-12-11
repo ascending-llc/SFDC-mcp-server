@@ -15,14 +15,12 @@
  */
 
 import { z } from 'zod';
-import { McpTool, McpToolConfig, OrgConfigInfo, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
+import { McpTool, McpToolConfig, ReleaseState, Services, Toolset, type OrgService } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
-import { type OrgService } from '@salesforce/mcp-provider-api';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam } from '../shared/params.js';
-import { type ToolTextResponse } from '../shared/types.js';
 
 export async function suggestUsername(orgService: OrgService): Promise<{
   suggestedUsername: string | undefined;
@@ -113,6 +111,7 @@ export class GetUsernameMcpTool extends McpTool<InputArgsShape, OutputArgsShape>
 
 WHEN TO USE THIS TOOL:
 - When uncertain which org username a user wants for Salesforce operations.
+- ALWAYS run this first in OAuth-only mode to resolve the username tied to the current OAuth token.
 
 To resolve the default org username, set the defaultTargetOrg param to true and defaultDevHub to false.
 To resole the default devhub org username, set the defaultTargetOrg param to false and defaultDevHub to true.
@@ -128,46 +127,41 @@ If it's not clear which type of org to resolve, set both defaultTargetOrg and de
   }
 
   public async exec(
-    input: InputArgs,
+    _input: InputArgs,
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
     try {
-      process.chdir(input.directory);
-
-      const generateResponse = (defaultFromConfig: OrgConfigInfo | undefined): ToolTextResponse =>
-        textResponse(`ALWAYS notify the user the following 3 pieces of information:
-1. If it is default target-org or target-dev-hub ('.key' on the config)
-2. The value of '.location' on the config
-3. The value of '.value' on the config
-
-- Full config: ${JSON.stringify(defaultFromConfig, null, 2)}
-
-UNLESS THE USER SPECIFIES OTHERWISE, use this username (.value) for the "usernameOrAlias" parameter in future Tool calls.`);
-
-      const orgService = this.services.getOrgService();
-      // Case 1: User explicitly asked for default target org
-      if (input.defaultTargetOrg) return generateResponse(await orgService.getDefaultTargetOrg());
-
-      // Case 2: User explicitly asked for default dev hub
-      if (input.defaultDevHub) return generateResponse(await orgService.getDefaultTargetDevHub());
-
-      // Case 3: User was vague, so suggest a username
-      const { aliasForReference, suggestedUsername, reasoning } = await suggestUsername(orgService);
-
-      if (!suggestedUsername) {
+      // OAuth-only mode: require extra parameter with OAuth context
+      if (!extra) {
+        console.error(`[get_username] ❌ No OAuth context provided`);
         return textResponse(
-          "No suggested username found. Please specify a username or alias explicitly. Also check the MCP server's startup args for allowlisting orgs.",
+          "OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.",
           true,
         );
       }
 
+      const orgService = this.services.getOrgService();
+
+      // Get OAuth connection (getConnection with empty username prioritizes OAuth from extra)
+      const connection = await orgService.getConnection('', extra);
+      const username = connection.getUsername();
+
+      if (!username) {
+        console.error(`[get_username] ❌ Failed to retrieve username from OAuth connection`);
+        return textResponse(
+          "Failed to retrieve org username from OAuth token. Please check your authentication.",
+          true,
+        );
+      }
+
+      console.error(`[get_username] ✅ Using OAuth-authenticated org: ${username}`);
+
       return textResponse(`
-YOU MUST inform the user that we are going to use "${suggestedUsername}" ${
-        aliasForReference ? `(Alias: ${aliasForReference}) ` : ''
-      }for the "usernameOrAlias" parameter.
-YOU MUST explain the reasoning for selecting this org, which is: "${reasoning}"
+YOU MUST inform the user that we are going to use "${username}" for the "usernameOrAlias" parameter.
+YOU MUST explain the reasoning: "it is the org authenticated via your OAuth token"
 UNLESS THE USER SPECIFIES OTHERWISE, use this username for the "usernameOrAlias" parameter in future Tool calls.`);
     } catch (error) {
+      console.error(`[get_username] ❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return textResponse(
         `Failed to determine appropriate username: ${error instanceof Error ? error.message : 'Unknown error'}`,
         true,

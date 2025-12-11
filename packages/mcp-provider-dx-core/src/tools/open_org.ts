@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { Org } from '@salesforce/core';
 import { MetadataResolver } from '@salesforce/source-deploy-retrieve';
 import open from 'open';
+import fs from 'node:fs';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
@@ -74,9 +75,21 @@ You can specify a metadata file you want to open.`,
     input: InputArgs,
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
-    process.chdir(input.directory);
+    if (input.directory && fs.existsSync(input.directory)) {
+      process.chdir(input.directory);
+    } else if (input.directory) {
+      console.error(`[open_org] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`);
+    }
 
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
+    if (!extra) {
+      console.error(`[open_org] ❌ No OAuth context provided`);
+      return textResponse(
+        'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
+        true,
+      );
+    }
+
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
 
     const org = await Org.create({
       connection

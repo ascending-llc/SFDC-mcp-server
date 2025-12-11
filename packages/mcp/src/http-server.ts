@@ -31,6 +31,8 @@ import helmet from 'helmet';
 // Session storage for multi-user support
 const transports = new Map<string, StreamableHTTPServerTransport>();
 const mcpServers = new Map<string, SfMcpServer>();
+const sseStreams = new Map<string, express.Response>(); // Track SSE response objects for keepalive
+const sessionActivity = new Map<string, number>(); // Track last activity per session
 
 /**
  * Create a new MCP server instance for a session
@@ -112,6 +114,7 @@ export async function startHttpServer(options: {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     try {
+      const now = Date.now();
       let transport = sessionId ? transports.get(sessionId) : undefined;
 
       // NEW SESSION: Initialize request without session ID
@@ -143,6 +146,7 @@ export async function startHttpServer(options: {
 
               mcpServers.set(newSessionId, server);
               transports.set(newSessionId, transport!);
+              sessionActivity.set(newSessionId, Date.now());
 
               // Connect server to transport
               await server.connect(transport!);
@@ -152,6 +156,8 @@ export async function startHttpServer(options: {
               console.error(`[HTTP] ❌ Session closed: ${closedSessionId}`);
               transports.delete(closedSessionId);
               mcpServers.delete(closedSessionId);
+              sseStreams.delete(closedSessionId);
+              sessionActivity.delete(closedSessionId);
             }
           });
         } else {
@@ -193,10 +199,46 @@ export async function startHttpServer(options: {
         } else if (method !== 'initialize') {
           console.error(`[HTTP] 📨 Session ${sessionId}: ${method}`);
         }
+        if (sessionId) sessionActivity.set(sessionId, now);
       } else if (req.method === 'GET') {
         console.error(`[HTTP] 🔄 Session ${sessionId}: SSE stream request`);
+        // Track SSE response object for keepalive
+        if (sessionId) {
+          sseStreams.set(sessionId, res);
+          sessionActivity.set(sessionId, now);
+          res.on('close', () => {
+            console.error(`[HTTP] SSE stream closed for session ${sessionId} - cleaning up session`);
+            sseStreams.delete(sessionId);
+
+            // EXPLICIT SESSION CLEANUP: onsessionclosed callback isn't reliable
+            // Clean up all session resources manually
+            const hadTransport = transports.has(sessionId);
+            const hadServer = mcpServers.has(sessionId);
+
+            transports.delete(sessionId);
+            mcpServers.delete(sessionId);
+            sessionActivity.delete(sessionId);
+
+            if (hadTransport || hadServer) {
+              console.error(`[HTTP] ✅ Manually cleaned up session ${sessionId} (transport: ${hadTransport}, server: ${hadServer})`);
+            }
+          });
+        }
       } else if (req.method === 'DELETE') {
-        console.error(`[HTTP] 🗑️  Session ${sessionId}: DELETE (closing)`);
+        console.error(`[HTTP] 🗑️  Session ${sessionId}: DELETE (closing) - cleaning up session`);
+        // EXPLICIT SESSION CLEANUP on DELETE
+        const hadTransport = transports.has(sessionId!);
+        const hadServer = mcpServers.has(sessionId!);
+        const hadStream = sseStreams.has(sessionId!);
+
+        transports.delete(sessionId!);
+        mcpServers.delete(sessionId!);
+        sseStreams.delete(sessionId!);
+        sessionActivity.delete(sessionId!);
+
+        if (hadTransport || hadServer || hadStream) {
+          console.error(`[HTTP] ✅ Manually cleaned up session ${sessionId} on DELETE (transport: ${hadTransport}, server: ${hadServer}, stream: ${hadStream})`);
+        }
       }
 
       // Handle the request (transport handles GET/POST/DELETE automatically)
@@ -228,9 +270,68 @@ export async function startHttpServer(options: {
       resolve();
     });
 
+    // SSE keepalive: Send periodic comments to prevent client timeout
+    // jarvis-api has a 60-second timeout, so send keepalive every 30 seconds
+    const keepaliveIntervalMs = 30000; // 30 seconds (well under 60s client timeout)
+    const sessionTtlMs = 5 * 60 * 1000; // prune idle sessions after 5 minutes
+    const keepalive = setInterval(() => {
+      const activeSessions = sseStreams.size;
+
+      if (activeSessions > 0) {
+        console.error(`[HTTP] ❤️  Sending SSE keepalive to ${activeSessions} active stream(s)`);
+
+        // Send SSE comment to each active stream
+        for (const [sessionId, stream] of sseStreams.entries()) {
+          try {
+            // SSE comment format: ": <comment>\n\n"
+            // Comments are ignored by clients but keep the connection alive
+            const keepaliveComment = ': keepalive\n\n';
+            const written = stream.write(keepaliveComment);
+
+            if (written) {
+              console.error(`[HTTP] ✅ Sent keepalive to session ${sessionId}`);
+            } else {
+              console.error(`[HTTP] ⚠️  Stream backpressure for session ${sessionId}`);
+            }
+          } catch (error) {
+            console.error(
+              `[HTTP] ❌ Failed to send keepalive to session ${sessionId}:`,
+              error instanceof Error ? error.message : String(error)
+            );
+            // Remove dead stream
+            sseStreams.delete(sessionId);
+            sessionActivity.delete(sessionId);
+          }
+        }
+      } else {
+        console.error(`[HTTP] No active SSE streams`);
+      }
+
+      // Prune idle sessions (no activity for TTL)
+      const now = Date.now();
+      for (const [sessionId, lastSeen] of sessionActivity.entries()) {
+        if (now - lastSeen > sessionTtlMs) {
+          const hadTransport = transports.delete(sessionId);
+          const hadServer = mcpServers.delete(sessionId);
+          const hadStream = sseStreams.delete(sessionId);
+          sessionActivity.delete(sessionId);
+          if (hadTransport || hadServer || hadStream) {
+            console.error(
+              `[HTTP] 🧹 Pruned idle session ${sessionId} (transport: ${hadTransport}, server: ${hadServer}, stream: ${hadStream})`
+            );
+          }
+        }
+      }
+    }, keepaliveIntervalMs);
+
     server.on('error', (error) => {
       console.error('[HTTP] Server error:', error);
       reject(error);
+    });
+
+    server.on('close', () => {
+      clearInterval(keepalive);
+      console.error('[HTTP] Server closed, keepalive stopped');
     });
   });
 }

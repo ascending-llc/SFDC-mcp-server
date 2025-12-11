@@ -44,45 +44,28 @@ export function sanitizeOrgs(orgs: OrgAuthorization[]): SanitizedOrgAuthorizatio
 
 // This function is the main entry point for Tools to get an allowlisted Connection
 export async function getConnection(
-  username: string,
+  _username: string,
   extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
 ): Promise<Connection> {
 
-  console.error(`[Auth] 🔍 getConnection called - checking for OAuth context in request`);
+  console.error(`[Auth] 🔍 getConnection called - OAuth-only mode`);
 
-  // Prioritize OAuth connection from extra parameter if available
-  if (extra) {
-    console.error(`[Auth] 🔐 'extra' parameter present, attempting OAuth connection`);
-
-    const oauthConnection = await createOAuthConnection(extra);
-    if (oauthConnection) {
-      console.error(`[OAuth] ✅ Using OAuth connection from request context`);
-      return oauthConnection;
-    }
-    console.error(`[OAuth] ⚠️  No OAuth context found in request, falling back to CLI auth`);
-  } else {
-    console.error(`[Auth] ℹ️  No 'extra' parameter provided, will use CLI auth`);
+  // OAuth-only mode: require extra parameter with OAuth context
+  if (!extra) {
+    console.error(`[Auth] ❌ No 'extra' parameter provided - OAuth required`);
+    throw new Error('OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.');
   }
 
-  // CLI fallback: username-based connection from local auth
-  if (username) {
-    const allOrgs = await getAllAllowedOrgs();
-    const foundOrg = findOrgByUsernameOrAlias(allOrgs, username);
+  console.error(`[Auth] 🔐 'extra' parameter present, attempting OAuth connection`);
 
-    if (!foundOrg)
-      return Promise.reject(
-        new Error(
-          'No org found with the provided username/alias. Ask the user to specify one or check their MCP Server startup config.'
-        )
-      );
-
-    console.error(`[Auth] Using CLI auth for org: ${foundOrg.username}`);
-    const authInfo = await AuthInfo.create({ username: foundOrg.username });
-    const connection = await Connection.create({ authInfo });
-    return connection;
+  const oauthConnection = await createOAuthConnection(extra);
+  if (oauthConnection) {
+    console.error(`[OAuth] ✅ Using OAuth connection from request context`);
+    return oauthConnection;
   }
 
-  throw new Error('No authentication available. Provide usernameOrAlias or OAuth token.');
+  console.error(`[OAuth] ❌ No OAuth context found in request`);
+  throw new Error('Failed to create OAuth connection. Please check your authentication headers (Authorization: Bearer <token>).');
 
 }
 

@@ -24,6 +24,7 @@ import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.j
 import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
+import fs from 'node:fs';
 
 /*
  * Run Apex tests in a Salesforce org.
@@ -146,16 +147,25 @@ What are the results for 707XXXXXXXXXXXX`,
       return textResponse("You can't specify which tests to run without setting testLevel='RunSpecifiedTests'", true);
     }
 
-    if (!input.usernameOrAlias)
+    // Safe chdir (avoid ENOENT)
+    if (input.directory && fs.existsSync(input.directory)) {
+      process.chdir(input.directory);
+    } else if (input.directory) {
+      console.error(
+        `[run_apex_test] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`
+      );
+    }
+
+    // OAuth-only mode: require extra parameter with OAuth context
+    if (!extra) {
+      console.error(`[run_apex_test] ❌ No OAuth context provided`);
       return textResponse(
-        'The usernameOrAlias parameter is required, if the user did not specify one use the #get_username tool',
+        'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
         true,
       );
+    }
 
-    // needed for org allowlist to work
-    process.chdir(input.directory);
-
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias, extra);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
     try {
       const testService = new TestService(connection);
       let result: TestResult | TestRunIdResult;
