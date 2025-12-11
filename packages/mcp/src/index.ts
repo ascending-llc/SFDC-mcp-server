@@ -24,6 +24,7 @@ import { Telemetry } from './telemetry.js';
 import { SfMcpServer } from './sf-mcp-server.js';
 import { registerToolsets } from './utils/registry-utils.js';
 import { Services } from './services.js';
+import { startHttpServer } from './http-server.js';
 
 /**
  * Sanitizes an array of org usernames by replacing specific orgs with a placeholder.
@@ -115,6 +116,26 @@ You can also use special values to control access to orgs:
     'allow-non-ga-tools': Flags.boolean({
       summary: 'Enable the ability to register tools that are not yet generally available (GA)',
     }),
+    transport: Flags.option({
+      options: ['stdio', 'http'] as const,
+      summary: 'Transport mode for the MCP server',
+      description: `Choose how the server communicates:
+- stdio: Standard input/output (default, for Claude Desktop)
+- http: HTTP server mode (for LibreChat/Jarvis integration)`,
+      default: 'stdio',
+    })(),
+    'http-host': Flags.string({
+      summary: 'HTTP server host (only used with --transport http)',
+      description: 'Host address for HTTP server. Defaults to 0.0.0.0 (all interfaces)',
+      default: '0.0.0.0',
+      dependsOn: ['transport'],
+    }),
+    'http-port': Flags.integer({
+      summary: 'HTTP server port (only used with --transport http)',
+      description: 'Port for HTTP server. Can also be set via SF_MCP_HTTP_PORT environment variable',
+      default: 3336,
+      dependsOn: ['transport'],
+    }),
   };
 
   public static examples = [
@@ -137,6 +158,14 @@ You can also use special values to control access to orgs:
     {
       description: 'Allow tools that are not generally available (NON-GA) to be registered with the server',
       command: '<%= config.bin %> --toolsets all --orgs DEFAULT_TARGET_ORG --allow-non-ga-tools',
+    },
+    {
+      description: 'Start the server in HTTP mode for LibreChat/Jarvis integration',
+      command: '<%= config.bin %> --transport http --toolsets all --orgs DEFAULT_TARGET_ORG',
+    },
+    {
+      description: 'Start HTTP server on custom host and port',
+      command: '<%= config.bin %> --transport http --http-host 127.0.0.1 --http-port 8080 --toolsets all --orgs DEFAULT_TARGET_ORG',
     },
   ];
 
@@ -202,10 +231,42 @@ You can also use special values to control access to orgs:
       services
     );
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    
-    console.error(`✅ Salesforce MCP Server v${this.config.version} running on stdio`);
+    // Select transport mode
+    if (flags.transport === 'http') {
+      const httpHost = flags['http-host'] ?? process.env.SF_MCP_HTTP_HOST ?? '0.0.0.0';
+      const httpPort = flags['http-port'] ?? parseInt(process.env.SF_MCP_HTTP_PORT ?? '3336', 10);
+
+      // Start HTTP server with StreamableHTTP transport
+      await startHttpServer({
+        host: httpHost,
+        port: httpPort,
+        config: {
+          name: 'sf-mcp-server',
+          version: this.config.version,
+          capabilities: {
+            resources: {},
+            tools: {},
+          }
+        },
+        telemetry: this.telemetry,
+        toolsets: flags.toolsets ?? [],
+        tools: flags.tools ?? [],
+        dynamicTools: flags['dynamic-tools'] ?? false,
+        allowNonGaTools: flags['allow-non-ga-tools'] ?? false,
+        allowedOrgs: new Set(flags.orgs),
+        services
+      });
+
+      // Keep process alive for HTTP mode
+      await new Promise(() => {
+        // This promise never resolves, keeping the server running
+      });
+    } else {
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+
+      console.error(`✅ Salesforce MCP Server v${this.config.version} running on stdio`);
+    }
   }
 
   protected async catch(error: Error): Promise<void> {

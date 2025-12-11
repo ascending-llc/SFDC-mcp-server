@@ -18,8 +18,11 @@ import { z } from 'zod';
 import { Org } from '@salesforce/core';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
+import fs from 'node:fs';
 
 /*
  * Create a new scratch org snapshot
@@ -84,14 +87,31 @@ create a snapshot of my MyScratch in myDevHub`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
-      process.chdir(input.directory);
+      if (input.directory && fs.existsSync(input.directory)) {
+        process.chdir(input.directory);
+      } else if (input.directory) {
+        console.error(
+          `[create_org_snapshot] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`
+        );
+      }
 
-      const connection = await this.services.getOrgService().getConnection(input.sourceOrg);
+      if (!extra) {
+        console.error(`[create_org_snapshot] ❌ No OAuth context provided`);
+        return textResponse(
+          'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
+          true,
+        );
+      }
+
+      const connection = await this.services.getOrgService().getConnection(input.sourceOrg ?? '', extra);
 
       const sourceOrgId = (await Org.create({ connection })).getOrgId();
-      const devHubConnection = await this.services.getOrgService().getConnection(input.devHub);
+      const devHubConnection = await this.services.getOrgService().getConnection(input.devHub ?? '', extra);
       const createResponse = await devHubConnection.sobject('OrgSnapshot').create({
         SourceOrg: sourceOrgId,
         Description: input.description,

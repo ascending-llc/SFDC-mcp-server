@@ -57,7 +57,7 @@ export class Services implements IServices {
     return {
       getAllowedOrgUsernames: async () => Cache.safeGet('allowedOrgs'),
       getAllowedOrgs: () => getAllAllowedOrgs(),
-      getConnection: (username: string) => getConnection(username),
+      getConnection: (username, extra) => getConnection(username, extra),
       getDefaultTargetOrg: () => getDefaultTargetOrg(),
       getDefaultTargetDevHub: () => getDefaultTargetDevHub(),
       findOrgByUsernameOrAlias: (allOrgs: SanitizedOrgAuthorization[], usernameOrAlias: string) =>

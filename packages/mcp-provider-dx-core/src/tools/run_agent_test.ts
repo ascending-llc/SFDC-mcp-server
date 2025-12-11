@@ -19,8 +19,11 @@ import { AgentTester } from '@salesforce/agents';
 import { Duration } from '@salesforce/kit';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
 import { textResponse } from '../shared/utils.js';
+import fs from 'node:fs';
 
 /*
  * Run Agent tests in a Salesforce org.
@@ -93,16 +96,29 @@ start myAgentTest and don't wait for results`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
-    if (!input.usernameOrAlias)
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
+    // Safe chdir (avoid ENOENT)
+    if (input.directory && fs.existsSync(input.directory)) {
+      process.chdir(input.directory);
+    } else if (input.directory) {
+      console.error(
+        `[run_agent_test] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`
+      );
+    }
+
+    // OAuth-only mode: require extra parameter with OAuth context
+    if (!extra) {
+      console.error(`[run_agent_test] ❌ No OAuth context provided`);
       return textResponse(
-        'The usernameOrAlias parameter is required, if the user did not specify one use the #get_username tool',
+        'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
         true,
       );
+    }
 
-    // needed for org allowlist to work
-    process.chdir(input.directory);
-    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+    const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
 
     try {
       const agentTester = new AgentTester(connection);

@@ -17,9 +17,12 @@
 import { z } from 'zod';
 import { AuthRemover, Org } from '@salesforce/core';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { textResponse } from '../shared/utils.js';
 import { directoryParam, usernameOrAliasParam } from '../shared/params.js';
+import fs from 'node:fs';
 
 /*
  * Delete a locally authorized Salesforce org
@@ -76,10 +79,28 @@ Can you delete test-fe2n4tc8pgku@example.com`,
     };
   }
 
-  public async exec(input: InputArgs): Promise<CallToolResult> {
+  public async exec(
+    input: InputArgs,
+    extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+  ): Promise<CallToolResult> {
     try {
-      process.chdir(input.directory);
-      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
+      if (input.directory && fs.existsSync(input.directory)) {
+        process.chdir(input.directory);
+      } else if (input.directory) {
+        console.error(
+          `[delete_org] ⚠️  Directory not found (${input.directory}). Continuing with current working directory.`
+        );
+      }
+
+      if (!extra) {
+        console.error(`[delete_org] ❌ No OAuth context provided`);
+        return textResponse(
+          'OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.',
+          true,
+        );
+      }
+
+      const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias ?? '', extra);
       const org = await Org.create({ connection });
 
       await org.delete();

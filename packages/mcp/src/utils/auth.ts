@@ -17,6 +17,9 @@
 import { AuthInfo, Connection, ConfigAggregator, OrgConfigProperties, type OrgAuthorization } from '@salesforce/core';
 import { type OrgConfigInfo, type SanitizedOrgAuthorization } from '@salesforce/mcp-provider-api';
 import Cache from './cache.js';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
+import { createOAuthConnection } from './auth-helper.js';
 
 /**
  * Sanitizes org authorization data by filtering out sensitive fields
@@ -40,21 +43,30 @@ export function sanitizeOrgs(orgs: OrgAuthorization[]): SanitizedOrgAuthorizatio
 }
 
 // This function is the main entry point for Tools to get an allowlisted Connection
-export async function getConnection(username: string): Promise<Connection> {
-  // We get all allowed orgs each call in case the directory has changed (default configs)
-  const allOrgs = await getAllAllowedOrgs();
-  const foundOrg = findOrgByUsernameOrAlias(allOrgs, username);
+export async function getConnection(
+  _username: string,
+  extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+): Promise<Connection> {
 
-  if (!foundOrg)
-    return Promise.reject(
-      new Error(
-        'No org found with the provided username/alias. Ask the user to specify one or check their MCP Server startup config.'
-      )
-    );
+  console.error(`[Auth] 🔍 getConnection called - OAuth-only mode`);
 
-  const authInfo = await AuthInfo.create({ username: foundOrg.username });
-  const connection = await Connection.create({ authInfo });
-  return connection;
+  // OAuth-only mode: require extra parameter with OAuth context
+  if (!extra) {
+    console.error(`[Auth] ❌ No 'extra' parameter provided - OAuth required`);
+    throw new Error('OAuth authentication required. This server operates in OAuth-only mode and does not support CLI authentication.');
+  }
+
+  console.error(`[Auth] 🔐 'extra' parameter present, attempting OAuth connection`);
+
+  const oauthConnection = await createOAuthConnection(extra);
+  if (oauthConnection) {
+    console.error(`[OAuth] ✅ Using OAuth connection from request context`);
+    return oauthConnection;
+  }
+
+  console.error(`[OAuth] ❌ No OAuth context found in request`);
+  throw new Error('Failed to create OAuth connection. Please check your authentication headers (Authorization: Bearer <token>).');
+
 }
 
 export function findOrgByUsernameOrAlias(
