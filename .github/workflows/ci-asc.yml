@@ -1,4 +1,4 @@
-name: Build and Push Google Analytics MCP to ECR Registry
+name: Build and Push Salesforce MCP to ECR Registry
 
 on:
   workflow_dispatch:
