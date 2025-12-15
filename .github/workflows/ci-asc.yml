@@ -60,6 +60,17 @@ jobs:
           echo "$TAGS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Ensure ECR repo exists
+        run: |
+          aws ecr describe-repositories \
+            --registry-id 897729109735 \
+            --repository-names jarvis/sfdc_mcp_server \
+          || aws ecr create-repository \
+            --registry-id 897729109735 \
+            --repository-name jarvis/sfdc_mcp_server \
+            --image-scanning-configuration scanOnPush=true
+
+
       - name: Build and push Docker image to ECR
         uses: docker/build-push-action@v5
         with:
