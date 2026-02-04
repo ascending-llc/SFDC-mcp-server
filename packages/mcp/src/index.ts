@@ -25,6 +25,7 @@ import { SfMcpServer } from './sf-mcp-server.js';
 import { registerToolsets } from './utils/registry-utils.js';
 import { Services } from './services.js';
 import { startHttpServer } from './http-server.js';
+import { installChdirShim } from './utils/request-context.js';
 
 /**
  * Sanitizes an array of org usernames by replacing specific orgs with a placeholder.
@@ -172,6 +173,10 @@ You can also use special values to control access to orgs:
   private telemetry?: Telemetry;
 
   public async run(): Promise<void> {
+    // Install chdir shim early - makes process.chdir() a no-op in OAuth-only mode
+    // This prevents crashes when tools or SDK code tries to change directories
+    installChdirShim();
+
     const { flags } = await this.parse(McpServerCommand);
 
     if (!flags['no-telemetry']) {

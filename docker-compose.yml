@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  sfdc-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sfdc-mcp-server
+    ports:
+      - "3336:3336"
+    environment:
+      # Server configuration
+      - SF_MCP_HTTP_HOST=0.0.0.0
+      - SF_MCP_HTTP_PORT=3336
+      - NODE_ENV=production
+
+      # Salesforce OAuth configuration
+      # Use login.salesforce.com for production, test.salesforce.com for sandbox
+      - SF_LOGIN_URL=https://login.salesforce.com
+
+      # Salesforce SDK writable directories
+      - SF_HOME=/app/.sf
+      - SFDX_HOME=/app/.sfdx
+      - SF_CACHE_DIR=/app/.cache
+
+    # Override default CMD if needed
+    # command: ["--transport", "http", "--toolsets", "data", "--no-telemetry"]
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3336/.well-known/oauth-protected-resource"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Optional: For development with live reload (mount source code)
+# Uncomment below for dev mode - requires rebuilding on changes
+#
+#   sfdc-mcp-server-dev:
+#     build:
+#       context: .
+#       dockerfile: Dockerfile
+#     container_name: sfdc-mcp-server-dev
+#     ports:
+#       - "3337:3336"
+#     volumes:
+#       - ./packages/mcp/lib:/app/packages/mcp/lib:ro
+#     environment:
+#       - SF_LOGIN_URL=https://test.salesforce.com  # Sandbox
+#     command: ["--transport", "http", "--toolsets", "all", "--no-telemetry"]

@@ -31,9 +31,27 @@ ENV NODE_ENV=production \
 RUN groupadd -r app && useradd -r -g app -d /app app
 COPY --from=build --chown=app:app /app /app
 
+# Create writable directories for Salesforce SDK (OAuth-only mode)
+# The SDK tries to create these directories for logging, state, and cache
+# Even though we use chdir shim, SDK initialization needs these paths
+RUN mkdir -p /app/.sf /app/.sfdx /app/.cache && \
+    chown -R app:app /app/.sf /app/.sfdx /app/.cache
+
+# Set Salesforce SDK environment variables to use writable locations
+ENV SF_HOME=/app/.sf \
+    SFDX_HOME=/app/.sfdx \
+    SF_CACHE_DIR=/app/.cache \
+    SF_LOGIN_URL=https://login.salesforce.com
+
 USER app
 EXPOSE 3336
 
 ENTRYPOINT ["node", "packages/mcp/bin/run.js"]
-# Provide sensible defaults; override flags at `docker run`
-CMD ["--help"]
+# Default: OAuth-only HTTP mode for LibreChat integration
+# Override flags at `docker run` if needed
+CMD ["--transport", "http", \
+     "--http-host", "0.0.0.0", \
+     "--http-port", "3336", \
+     "--toolsets", "all", \
+     "--orgs", "ALLOW_ALL_ORGS", \
+     "--no-telemetry"]

@@ -24,6 +24,7 @@ import { registerToolsets } from './utils/registry-utils.js';
 import Cache from './utils/cache.js';
 import cors from 'cors';
 import helmet from 'helmet';
+import { salesforceOAuthMiddleware } from './middleware/oauth-middleware.js';
 
 // Session storage for multi-user support
 const transports = new Map<string, StreamableHTTPServerTransport>();
@@ -71,10 +72,18 @@ export async function startHttpServer(options: {
   app.use(cors());
   app.use(express.json());
 
-  // Request logging middleware
+  // Request logging middleware with auth logging
   app.use((req, _res, next) => {
     const timestamp = new Date().toISOString();
     console.error(`[${timestamp}] ${req.method} ${req.path} - Session: ${req.headers['mcp-session-id'] || 'none'}`);
+
+    // Log OAuth token presence (never log the actual token)
+    const authHeader = req.headers['authorization'];
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      const tokenLength = authHeader.substring(7).length;
+      console.error(`[HTTP] 🔐 Bearer token present (length: ${tokenLength})`);
+    }
+
     next();
   });
 
@@ -90,8 +99,28 @@ export async function startHttpServer(options: {
     res.json(healthData);
   });
 
+  // OAuth Protected Resource Metadata - RFC 9728
+  // Tells jarvis that this server requires OAuth and where to get tokens
+  app.get('/.well-known/oauth-protected-resource', (_req, res) => {
+    const salesforceAuthServer = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
+
+    // Use localhost for resource URL instead of 0.0.0.0 (which is not a valid client URL)
+    const resourceHost = options.host === '0.0.0.0' ? 'localhost' : options.host;
+
+    res.json({
+      resource: `http://${resourceHost}:${options.port}`,
+      authorization_servers: [salesforceAuthServer],
+      scopes_supported: ['full'],
+      bearer_methods_supported: ['header'],
+      resource_documentation: 'https://github.com/salesforcecli/mcp'
+    });
+
+    console.error('[OAuth Discovery] ✅ Sent protected resource metadata to client');
+  });
+
   // Main MCP endpoint - handles GET (SSE), POST (requests), DELETE (cleanup)
-  app.all('/mcp', async (req, res) => {
+  // OAuth middleware validates Bearer token for tool calls (skips initialize/ping/tools/list)
+  app.all('/mcp', salesforceOAuthMiddleware, async (req, res) => {
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
 
     try {
