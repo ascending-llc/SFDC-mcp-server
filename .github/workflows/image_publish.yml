@@ -48,12 +48,12 @@ jobs:
       - name: Set image tags
         id: set-tags
         run: |
-          TAGS="${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp:${{ github.sha }}
-          ${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp:latest"
-          
+          TAGS="${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp_server:${{ github.sha }}
+          ${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp_server:latest"
+
           if [ -n "${{ inputs.release_version }}" ]; then
             TAGS="$TAGS
-          ${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp:${{ inputs.release_version }}"
+          ${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp_server:${{ inputs.release_version }}"
           fi
           
           echo "tags<<EOF" >> $GITHUB_OUTPUT

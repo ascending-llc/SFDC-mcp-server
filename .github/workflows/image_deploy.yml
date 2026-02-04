@@ -107,7 +107,7 @@ jobs:
 
       - name: Update SFDC MCP on EKS
         env:
-          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp:latest
+          image: ${{ steps.login-ecr.outputs.registry }}/jarvis/sfdc_mcp_server:latest
         run: kubectl set image deploy/sfdc-mcp sfdc-mcp=$image -n ${{ inputs.application  }}
 
       - name: restart pods
