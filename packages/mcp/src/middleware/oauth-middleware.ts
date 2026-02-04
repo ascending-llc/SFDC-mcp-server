@@ -74,11 +74,11 @@ export function salesforceOAuthMiddleware(
   // NOTE: initialize and ping MUST be allowed without auth (protocol handshake)
   const skipAuthMethods = ['initialize', 'ping'];
 
-  // Skip auth for discovery operations
+  // Skip auth for resource/prompt discovery only
+  // NOTE: tools/list is NOT skipped - it must return 401 to trigger LibreChat OAuth flow
   const isListOperation = method && (
     method.startsWith('resources/') ||  // resources/list, resources/templates/list, etc.
-    method.startsWith('prompts/') ||    // prompts/list, prompts/get, etc.
-    method.startsWith('tools/list')     // tools/list
+    method.startsWith('prompts/')       // prompts/list, prompts/get, etc.
   );
 
   // Skip auth for all notification methods (protocol lifecycle)
