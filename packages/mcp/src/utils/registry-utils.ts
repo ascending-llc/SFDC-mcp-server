@@ -25,6 +25,21 @@ import {
   TOOLSETS,
   Versioned,
 } from '@salesforce/mcp-provider-api';
+
+// Tools that only require Salesforce API access (OAuth token)
+// No file system or CLI dependencies - safe for cloud/serverless environments
+const API_ONLY_TOOLS = new Set([
+  // GA tools
+  'run_soql_query',
+  'list_all_orgs',
+  'get_username',
+  'assign_permission_set',
+  'run_apex_test',
+  // NON_GA tools (require --allow-non-ga-tools flag)
+  'list_devops_center_projects',
+  'list_devops_center_work_items',
+  'check_devops_center_commit_status',
+]);
 import { SfMcpServer } from '../sf-mcp-server.js';
 import { MCP_PROVIDER_REGISTRY } from '../registry.js';
 import { addTool, isToolRegistered } from '../utils/tools.js';
@@ -36,6 +51,7 @@ export async function registerToolsets(
   tools: string[],
   useDynamicTools: boolean,
   allowNonGaTools: boolean,
+  apiOnly: boolean,
   server: SfMcpServer,
   services: Services
 ): Promise<void> {
@@ -56,7 +72,7 @@ export async function registerToolsets(
 
     ux.stderr('Registering dynamic tools.');
     // eslint-disable-next-line no-await-in-loop
-    await registerTools(dynamicTools, server, useDynamicTools, allowNonGaTools);
+    await registerTools(dynamicTools, server, useDynamicTools, allowNonGaTools, apiOnly);
   } else {
     ux.stderr('Skipping registration of dynamic tools.');
   }
@@ -76,7 +92,7 @@ export async function registerToolsets(
     if (toolsetsToEnable.has(toolset)) {
       ux.stderr(`Registering toolset: '${toolset}'`);
       // eslint-disable-next-line no-await-in-loop
-      await registerTools(toolsetRegistry[toolset], server, useDynamicTools, allowNonGaTools);
+      await registerTools(toolsetRegistry[toolset], server, useDynamicTools, allowNonGaTools, apiOnly);
     } else {
       ux.stderr(`!! Skipping toolset: '${toolset}'`);
     }
@@ -109,7 +125,7 @@ Valid tools include:
     for (const tool of toolRegistry) {
       if (tools.includes(tool.getName())) {
         // eslint-disable-next-line no-await-in-loop
-        await registerTools([tool], server, useDynamicTools, allowNonGaTools);
+        await registerTools([tool], server, useDynamicTools, allowNonGaTools, apiOnly);
       }
     }
   }
@@ -119,12 +135,19 @@ async function registerTools(
   tools: McpTool[],
   server: SfMcpServer,
   useDynamicTools: boolean,
-  allowNonGaTools: boolean
+  allowNonGaTools: boolean,
+  apiOnly: boolean
 ): Promise<void> {
   for (const tool of tools) {
     if (!allowNonGaTools && tool.getReleaseState() === ReleaseState.NON_GA) {
       ux.stderr(
         `* Skipping registration of non-ga tool '${tool.getName()}' because the '--allow-non-ga-tools' flag was not set at server startup.`
+      );
+      continue;
+    }
+    if (apiOnly && !API_ONLY_TOOLS.has(tool.getName())) {
+      ux.stderr(
+        `* Skipping registration of tool '${tool.getName()}' because the '--api-only' flag was set.`
       );
       continue;
     }

@@ -73,12 +73,12 @@ export function installChdirShim(): void {
   // Replace with no-op shim
   process.chdir = function shimmedChdir(directory: string | URL): void {
     const dirStr = typeof directory === 'string' ? directory : directory.toString();
-    console.error(`[Chdir Shim] ⏭️  No-op chdir (OAuth-only mode): ${dirStr}`);
+    console.error(`[Chdir Shim]   No-op chdir (OAuth-only mode): ${dirStr}`);
 
     // Always no-op - do not call originalChdir
     // This is intentional for OAuth-only HTTP mode
     return;
   };
 
-  console.error(`[Chdir Shim] ✅ Installed chdir shim (OAuth-only mode)`);
+  console.error(`[Chdir Shim]  Installed chdir shim (OAuth-only mode)`);
 }

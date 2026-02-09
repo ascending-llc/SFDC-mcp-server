@@ -51,31 +51,29 @@ export function salesforceOAuthMiddleware(
 ): void | Response {
   // Skip auth for GET requests (SSE streams)
   if (req.method === 'GET') {
-    console.error(`[OAuth Middleware] ⏭️  Skipping auth for GET request (SSE)`);
+    console.error(`[OAuth Middleware] [OAUTH-DEBUG] Skipping auth for GET request (SSE stream)`);
+    console.error(`[OAuth Middleware] [OAUTH-DEBUG] GET headers: session=${req.headers['mcp-session-id']}, auth=${req.headers['authorization'] ? 'present' : 'MISSING'}`);
     return next();
   }
 
   const requestId = req.body?.id ?? 'unknown';
   const method = req.body?.method;
 
-  console.error(`[OAuth Middleware] [Request ${requestId}] 🔐 Validating auth for method: ${method}`);
+  console.error(`[OAuth Middleware] [Request ${requestId}]  Validating auth for method: ${method || 'undefined'}`);
 
-  // Debug: Log all headers to see what LibreChat is sending
-  if (method === 'tools/call') {
-    console.error(`[OAuth Middleware] [Request ${requestId}] 🔍 Headers received:`, JSON.stringify({
-      authorization: req.headers.authorization ? `Bearer ***${req.headers.authorization.substring(req.headers.authorization.length - 10)}` : 'MISSING',
-      'x-salesforce-instance-url': req.headers['x-salesforce-instance-url'] || 'MISSING',
-      'mcp-session-id': req.headers['mcp-session-id'],
-      'content-type': req.headers['content-type']
-    }, null, 2));
+  // Skip auth for POST requests with no method (OAuth detection probes)
+  // LibreChat sends POST with empty body {} to detect OAuth requirement
+  if (!method) {
+    console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for empty/invalid request (OAuth detection)`);
+    return next();
   }
 
-  // Skip auth for protocol discovery/listing methods (no user context needed)
-  // NOTE: initialize and ping MUST be allowed without auth (protocol handshake)
-  const skipAuthMethods = ['initialize', 'ping'];
+  // Skip auth ONLY for protocol handshake methods
+  // NOTE: tools/list REQUIRES auth to prevent false positive "authenticated" state
+  // OAuth detection happens via /.well-known endpoint and 401 challenges, NOT via tools/list
+  const skipAuthMethods = ['initialize', 'ping', 'tools/list'];
 
-  // Skip auth for resource/prompt discovery only
-  // NOTE: tools/list is NOT skipped - it must return 401 to trigger LibreChat OAuth flow
+  // Skip auth for resource/prompt discovery
   const isListOperation = method && (
     method.startsWith('resources/') ||  // resources/list, resources/templates/list, etc.
     method.startsWith('prompts/')       // prompts/list, prompts/get, etc.
@@ -85,7 +83,7 @@ export function salesforceOAuthMiddleware(
   const isNotification = method && method.startsWith('notifications/');
 
   if (skipAuthMethods.includes(method) || isListOperation || isNotification) {
-    console.error(`[OAuth Middleware] [Request ${requestId}] ⏭️  Skipping auth for method: ${method}`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for method: ${method}`);
     return next();
   }
 
@@ -93,40 +91,53 @@ export function salesforceOAuthMiddleware(
   const authHeader = getHeaderValue(req, 'authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.error(`[OAuth Middleware] [Request ${requestId}] ❌ Missing or invalid Authorization header`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Missing or invalid Authorization header`);
 
     const baseUrl = `http://${req.get('host')}`;
     const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required. To resolve: authenticate via your MCP client. Your client should redirect to Salesforce OAuth.", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
 
-    console.error(`[OAuth Middleware] [Request ${requestId}] 🚫 Returning 401 Unauthorized - Plain JSON format (LibreChat OAuth detection)`);
-    
-    return res
-      .status(401)
-      .setHeader('WWW-Authenticate', wwwAuth)
-      .json({
-        error: 'invalid_token',
-        error_description: 'OAuth authentication required. To resolve: authenticate via your MCP client. Your client should redirect to Salesforce OAuth.'
-      });
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized (LibreChat OAuth detection)`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] HTTP method: ${req.method}, MCP method: ${method}`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] About to send 401 response...`);
+
+    // Return error format that matches LibreChat's isOAuthError() checks:
+    // - code: 401 or 403
+    // - message containing: '401', 'invalid_token', 'unauthorized', 'authentication required'
+    res.status(401);
+    res.setHeader('WWW-Authenticate', wwwAuth);
+    res.setHeader('Content-Type', 'application/json');
+    const body = JSON.stringify({
+      code: 401,
+      message: 'Unauthorized: invalid_token - OAuth authentication required',
+      error: 'invalid_token',
+      error_description: 'OAuth authentication required'
+    });
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] Sending body: ${body}`);
+    res.end(body);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] 401 response sent and ended`);
+    return;
   }
 
   // Extract token (never log the actual token)
   const accessToken = authHeader.substring(7).trim();
 
   if (!accessToken) {
-    console.error(`[OAuth Middleware] [Request ${requestId}] ❌ Empty Bearer token`);
-    console.error(`[OAuth Middleware] [Request ${requestId}] 🚫 Returning 401 Unauthorized - Plain JSON format (LibreChat OAuth detection)`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Empty Bearer token`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized (LibreChat OAuth detection)`);
 
     return res
       .status(401)
       .setHeader('WWW-Authenticate', 'Bearer error="invalid_token", error_description="Bearer token is empty"')
       .json({
+        code: 401,
+        message: 'Unauthorized: invalid_token - Bearer token is empty',
         error: 'invalid_token',
         error_description: 'Bearer token is empty'
       });
   }
 
-  // Log success (token length only - NEVER log the actual token)
-  console.error(`[OAuth Middleware] [Request ${requestId}] ✅ Bearer token validated (length: ${accessToken.length})`);
+  // Log success
+  console.error(`[OAuth Middleware] [Request ${requestId}] Bearer token validated`);
 
   next();
 }

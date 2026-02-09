@@ -117,6 +117,12 @@ You can also use special values to control access to orgs:
     'allow-non-ga-tools': Flags.boolean({
       summary: 'Enable the ability to register tools that are not yet generally available (GA)',
     }),
+    'api-only': Flags.boolean({
+      summary: 'Only register tools that work with API calls (no file system or CLI dependencies)',
+      description: `When enabled, only tools marked with ExecutionMode.API_ONLY will be registered.
+This is useful for cloud/serverless deployments where file system and CLI access is not available.
+Tools requiring workspace access or CLI binaries will be skipped.`,
+    }),
     transport: Flags.option({
       options: ['stdio', 'http'] as const,
       summary: 'Transport mode for the MCP server',
@@ -167,6 +173,10 @@ You can also use special values to control access to orgs:
     {
       description: 'Start HTTP server on custom host and port',
       command: '<%= config.bin %> --transport http --http-host 127.0.0.1 --http-port 8080 --toolsets all --orgs DEFAULT_TARGET_ORG',
+    },
+    {
+      description: 'Start server with only API-based tools (no file system or CLI dependencies)',
+      command: '<%= config.bin %> --transport http --toolsets all --orgs DEFAULT_TARGET_ORG --api-only',
     },
   ];
 
@@ -232,6 +242,7 @@ You can also use special values to control access to orgs:
       flags.tools ?? [],
       flags['dynamic-tools'] ?? false,
       flags['allow-non-ga-tools'] ?? false,
+      flags['api-only'] ?? false,
       server,
       services
     );
@@ -258,6 +269,7 @@ You can also use special values to control access to orgs:
         tools: flags.tools ?? [],
         dynamicTools: flags['dynamic-tools'] ?? false,
         allowNonGaTools: flags['allow-non-ga-tools'] ?? false,
+        apiOnly: flags['api-only'] ?? false,
         allowedOrgs: new Set(flags.orgs),
         services
       });
@@ -270,7 +282,7 @@ You can also use special values to control access to orgs:
       const transport = new StdioServerTransport();
       await server.connect(transport);
 
-      console.error(`✅ Salesforce MCP Server v${this.config.version} running on stdio`);
+      console.error(` Salesforce MCP Server v${this.config.version} running on stdio`);
     }
   }
 

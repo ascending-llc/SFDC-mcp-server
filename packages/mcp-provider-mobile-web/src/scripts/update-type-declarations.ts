@@ -29,7 +29,7 @@ const RESOURCES_DIR = path.resolve(PROJECT_ROOT, 'packages/mcp-provider-mobile-w
 const TEMP_DIR = path.resolve(PROJECT_ROOT, 'temp-lightning-types');
 
 async function downloadAndExtractLightningTypes(): Promise<void> {
-  console.log('🔄 Starting update of mobile capability TypeScript type declarations...');
+  console.log(' Starting update of mobile capability TypeScript type declarations...');
 
   try {
     // Clean up any existing temp directory
@@ -39,7 +39,7 @@ async function downloadAndExtractLightningTypes(): Promise<void> {
     fs.mkdirSync(TEMP_DIR, { recursive: true });
 
     // Step 1: Download the latest tarball of @salesforce/lightning-types
-    console.log('📦 Downloading latest @salesforce/lightning-types package...');
+    console.log(' Downloading latest @salesforce/lightning-types package...');
     const packResult = execSync('npm pack @salesforce/lightning-types@latest', {
       cwd: TEMP_DIR,
       encoding: 'utf-8',
@@ -52,10 +52,10 @@ async function downloadAndExtractLightningTypes(): Promise<void> {
       throw new Error(`Tarball not found at ${tarballPath}`);
     }
 
-    console.log(`✅ Downloaded: ${tarballName}`);
+    console.log(` Downloaded: ${tarballName}`);
 
     // Step 2: Extract the contents of the tarball
-    console.log('📂 Extracting tarball contents...');
+    console.log(' Extracting tarball contents...');
     await tar.x({
       file: tarballPath,
       cwd: TEMP_DIR,
@@ -69,10 +69,10 @@ async function downloadAndExtractLightningTypes(): Promise<void> {
       throw new Error(`Mobile capabilities directory not found at ${mobileCapabilitiesSourceDir}`);
     }
 
-    console.log('✅ Found mobile capabilities directory in extracted package');
+    console.log(' Found mobile capabilities directory in extracted package');
 
     // Step 4: Replace the contents of packages/mobile-web/resources/
-    console.log('🔄 Replacing resources directory contents...');
+    console.log(' Replacing resources directory contents...');
 
     // Remove existing resources directory contents
     if (fs.existsSync(RESOURCES_DIR)) {
@@ -84,14 +84,14 @@ async function downloadAndExtractLightningTypes(): Promise<void> {
 
     await copyWithLowerCaseDirs(mobileCapabilitiesSourceDir, RESOURCES_DIR);
 
-    console.log('✅ Successfully replaced resources directory contents');
+    console.log(' Successfully replaced resources directory contents');
 
     // Clean up temp directory
     fs.rmSync(TEMP_DIR, { recursive: true, force: true });
 
-    console.log('🎉 Mobile capability TypeScript type declarations updated successfully!');
+    console.log(' Mobile capability TypeScript type declarations updated successfully!');
   } catch (error) {
-    console.error('❌ Error updating mobile capability type declarations:', error);
+    console.error(' Error updating mobile capability type declarations:', error);
 
     // Clean up temp directory on error
     if (fs.existsSync(TEMP_DIR)) {

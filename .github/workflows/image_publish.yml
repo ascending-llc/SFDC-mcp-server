@@ -69,14 +69,14 @@ jobs:
           
           # Check if tag already exists
           if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-            echo "⚠️  Tag $TAG_NAME already exists, skipping tag creation"
+            echo "  Tag $TAG_NAME already exists, skipping tag creation"
             echo "tag_created=false" >> $GITHUB_OUTPUT
           else
             git config --local user.email "action@github.com"
             git config --local user.name "GitHub Action"
             git tag -a "$TAG_NAME" -m "Release version ${{ inputs.release_version }}"
             git push origin "$TAG_NAME"
-            echo "✅ Created and pushed tag: $TAG_NAME"
+            echo " Created and pushed tag: $TAG_NAME"
             echo "tag_created=true" >> $GITHUB_OUTPUT
           fi
           echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
@@ -93,7 +93,7 @@ jobs:
 
       - name: Summary
         run: |
-          echo "## 🚀 Build and Push Summary" >> $GITHUB_STEP_SUMMARY
+          echo "##  Build and Push Summary" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit SHA:** \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Docker tags pushed:**" >> $GITHUB_STEP_SUMMARY
           echo "  - \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY  
@@ -102,9 +102,9 @@ jobs:
           if [ -n "${{ inputs.release_version }}" ]; then
             echo "  - \`${{ inputs.release_version }}\`" >> $GITHUB_STEP_SUMMARY
             if [ "${{ steps.create-tag.outputs.tag_created }}" = "true" ]; then
-              echo "- **Git tag created:** \`${{ steps.create-tag.outputs.tag_name }}\` ✅" >> $GITHUB_STEP_SUMMARY
+              echo "- **Git tag created:** \`${{ steps.create-tag.outputs.tag_name }}\` " >> $GITHUB_STEP_SUMMARY
             else
-              echo "- **Git tag:** \`${{ steps.create-tag.outputs.tag_name }}\` (already existed) ⚠️" >> $GITHUB_STEP_SUMMARY
+              echo "- **Git tag:** \`${{ steps.create-tag.outputs.tag_name }}\` (already existed) " >> $GITHUB_STEP_SUMMARY
             fi
           else
             echo "- **Git tag:** None (no release_version provided)" >> $GITHUB_STEP_SUMMARY

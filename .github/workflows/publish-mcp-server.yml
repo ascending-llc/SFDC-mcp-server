@@ -162,17 +162,17 @@ jobs:
 
           # Make sure that the AppInsights key is NOT in 'src/'
           if grep -q "const APP_INSIGHTS_KEY = '$APP_INSIGHTS_KEY';" packages/mcp/src/telemetry.ts; then
-            echo "❌ AppInsights key found in src."
+            echo " AppInsights key found in src."
             exit 1
           else
-            echo "✅ AppInsights key not found in src"
+            echo " AppInsights key not found in src"
           fi
 
           # Replace the AppInsights key in the built 'lib/'
           if grep -q "const APP_INSIGHTS_KEY = '$APP_INSIGHTS_KEY';" packages/mcp/lib/telemetry.js; then
-            echo "✅ AppInsights key successfully replaced"
+            echo " AppInsights key successfully replaced"
           else
-            echo "❌ AppInsights key replacement failed"
+            echo " AppInsights key replacement failed"
             exit 1
           fi
         env:

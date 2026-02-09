@@ -36,7 +36,7 @@ function getHeaderValue(
  * @returns Instance URL (e.g., "https://na1.salesforce.com")
  */
 async function deriveInstanceUrlFromToken(accessToken: string): Promise<string> {
-  console.error(`[OAuth] 🔍 Deriving instance URL from token (slow path - userinfo API call)`);
+  console.error(`[OAuth]  Deriving instance URL from token (slow path - userinfo API call)`);
 
   const userinfoUrl = 'https://login.salesforce.com/services/oauth2/userinfo';
 
@@ -58,11 +58,11 @@ async function deriveInstanceUrlFromToken(accessToken: string): Promise<string> 
       throw new Error('Instance URL not found in userinfo response');
     }
 
-    console.error(`[OAuth] ✅ Derived instance URL: ${instanceUrl}`);
+    console.error(`[OAuth]  Derived instance URL: ${instanceUrl}`);
     return instanceUrl;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[OAuth] ❌ Failed to derive instance URL: ${errorMsg}`);
+    console.error(`[OAuth]  Failed to derive instance URL: ${errorMsg}`);
     throw new Error(`Failed to derive Salesforce instance URL from token: ${errorMsg}`);
   }
 }
@@ -86,16 +86,17 @@ export async function getAuthContextFromAsyncLocal(): Promise<SalesforceAuthCont
   const ctx = getRequestContext();
 
   if (!ctx) {
-    console.error(`[OAuth] ℹ️  No request context found in AsyncLocalStorage`);
+    console.error(`[OAuth]   No request context found in AsyncLocalStorage`);
     return undefined;
   }
 
-  console.error(`[OAuth] 🔍 Extracting auth context from AsyncLocalStorage (transport: ${ctx.transportMode})`);
+  console.error('[OAuth] ════════════════════════════════════════');
+  console.error(`[OAuth] Extracting auth context (transport: ${ctx.transportMode}, request: ${ctx.requestId})`);
 
   const headers = ctx.extra?.requestInfo?.headers as Record<string, string | string[]> | undefined;
 
   if (!headers) {
-    console.error(`[OAuth] ℹ️  No headers found in request context`);
+    console.error(`[OAuth]   No headers found in request context`);
     return undefined;
   }
 
@@ -103,28 +104,31 @@ export async function getAuthContextFromAsyncLocal(): Promise<SalesforceAuthCont
   const authHeader = getHeaderValue(headers, 'authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.error(`[OAuth] ℹ️  No Bearer token found in Authorization header`);
+    console.error(`[OAuth]   No Bearer token found in Authorization header`);
     return undefined;
   }
 
   const accessToken = authHeader.substring(7).trim();
 
   if (!accessToken) {
-    console.error(`[OAuth] ⚠️  Authorization header has empty Bearer token`);
+    console.error(`[OAuth]   Authorization header has empty Bearer token`);
     return undefined;
   }
 
-  console.error(`[OAuth] ✅ Extracted OAuth token from headers (length: ${accessToken.length})`);
+  console.error(`[OAuth]  Extracted OAuth token (length: ${accessToken.length} chars)`);
 
   // Extract or derive instance URL
   let instanceUrl = getHeaderValue(headers, 'x-salesforce-instance-url');
 
   if (instanceUrl) {
-    console.error(`[OAuth] ✅ Using instance URL from header: ${instanceUrl}`);
+    console.error(`[OAuth]  Using instance URL from header: ${instanceUrl}`);
   } else {
     // Slow path: derive from userinfo API
     instanceUrl = await deriveInstanceUrlFromToken(accessToken);
   }
+
+  console.error('[OAuth] Auth context extracted successfully');
+  console.error('[OAuth] ════════════════════════════════════════');
 
   return {
     accessToken,
@@ -155,11 +159,14 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
   const authContext = await getAuthContextFromAsyncLocal();
 
   if (!authContext) {
-    console.error(`[OAuth] ℹ️  Cannot create OAuth connection - no auth context available`);
+    console.error(`[OAuth]   Cannot create OAuth connection - no auth context available`);
     return undefined;
   }
 
-  console.error(`[OAuth] 🔧 Creating OAuth connection for instance: ${authContext.instanceUrl}`);
+  console.error('[OAuth] ════════════════════════════════════════');
+  console.error(`[OAuth] Creating OAuth connection`);
+  console.error(`[OAuth] Instance URL: ${authContext.instanceUrl}`);
+  console.error(`[OAuth] Token length: ${authContext.accessToken.length} chars`);
 
   try {
     const authInfo = await AuthInfo.create({
@@ -172,11 +179,14 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
 
     const connection = await Connection.create({ authInfo });
 
-    console.error(`[OAuth] ✅ OAuth connection created successfully`);
+    console.error(`[OAuth]  OAuth connection created successfully`);
+    console.error(`[OAuth]  Org ID: ${connection.getAuthInfoFields().orgId}`);
+    console.error(`[OAuth]  Username: ${connection.getUsername()}`);
+    console.error('[OAuth] ════════════════════════════════════════');
     return connection;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[OAuth] ❌ Failed to create OAuth connection: ${errorMsg}`);
+    console.error(`[OAuth]  Failed to create OAuth connection: ${errorMsg}`);
     throw new Error(`Failed to create OAuth Salesforce connection: ${errorMsg}`);
   }
 }

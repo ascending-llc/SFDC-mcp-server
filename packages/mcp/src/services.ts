@@ -55,19 +55,19 @@ export class Services implements IServices {
       // OAuth-only mode: Legacy CLI auth functions not supported
       // These functions are kept for backward compatibility but return empty/error values
       getAllowedOrgs: () => {
-        console.error('[Services] ⚠️  getAllowedOrgs() not supported in OAuth-only mode');
+        console.error('[Services]   getAllowedOrgs() not supported in OAuth-only mode');
         return Promise.resolve([]);
       },
       getDefaultTargetOrg: () => {
-        console.error('[Services] ⚠️  getDefaultTargetOrg() not supported in OAuth-only mode');
+        console.error('[Services]   getDefaultTargetOrg() not supported in OAuth-only mode');
         return Promise.resolve(undefined);
       },
       getDefaultTargetDevHub: () => {
-        console.error('[Services] ⚠️  getDefaultTargetDevHub() not supported in OAuth-only mode');
+        console.error('[Services]   getDefaultTargetDevHub() not supported in OAuth-only mode');
         return Promise.resolve(undefined);
       },
       findOrgByUsernameOrAlias: (_allOrgs: SanitizedOrgAuthorization[], _usernameOrAlias: string) => {
-        console.error('[Services] ⚠️  findOrgByUsernameOrAlias() not supported in OAuth-only mode');
+        console.error('[Services]   findOrgByUsernameOrAlias() not supported in OAuth-only mode');
         return undefined;
       },
     };

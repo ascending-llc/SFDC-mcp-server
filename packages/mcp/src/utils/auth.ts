@@ -68,7 +68,7 @@ export function sanitizeOrgs(orgs: OrgAuthorization[]): SanitizedOrgAuthorizatio
  * @throws Error if OAuth context not available in AsyncLocalStorage
  */
 export async function getConnection(username: string): Promise<Connection> {
-  console.error(`[Auth] 🔍 getConnection called for username: ${username}`);
+  console.error(`[Auth]  getConnection called for username: ${username}`);
 
   // OAuth-only mode - check AsyncLocalStorage for OAuth context
   const oauthConnection = await createOAuthConnection();
@@ -78,11 +78,11 @@ export async function getConnection(username: string): Promise<Connection> {
       'OAuth authentication required. No OAuth context found in request. ' +
       'Please ensure Authorization: Bearer <token> header is provided. ' +
       'CLI-based authentication is not supported in OAuth-only mode.';
-    console.error(`[Auth] ❌ ${errorMsg}`);
+    console.error(`[Auth]  ${errorMsg}`);
     throw new Error(errorMsg);
   }
 
-  console.error(`[Auth] ✅ Using OAuth connection from AsyncLocalStorage`);
+  console.error(`[Auth]  Using OAuth connection from AsyncLocalStorage`);
   return oauthConnection;
 }
 

@@ -111,7 +111,7 @@ export class SfMcpServer extends McpServer implements ToolMethodSignatures {
       const transportMode = extra?.requestInfo?.headers ? 'http' : 'stdio';
       const requestId = (extra as any)?.id ?? 'unknown';
 
-      console.error(`[SfMcpServer] 🔧 Tool ${name} - Transport: ${transportMode}, Request: ${requestId}`);
+      console.error(`[SfMcpServer]  Tool ${name} - Transport: ${transportMode}, Request: ${requestId}`);
 
       // Check rate limit before executing tool
       if (this.rateLimiter) {
