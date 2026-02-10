@@ -39,7 +39,7 @@ export const searchRecordsParamsSchema = z.object({
 AGENT INSTRUCTIONS:
 - Minimum 2 characters required
 - Searches across name fields and other indexed text fields
-- Use * as wildcard (e.g., "John*" finds "John", "Johnson", "Johnny")`),
+- Special characters are automatically escaped for safety`),
   objects: z
     .array(z.string())
     .optional()

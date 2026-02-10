@@ -72,7 +72,10 @@ export class CreateOrgSnapshotMcpTool extends McpTool<InputArgsShape, OutputArgs
       title: 'Create a new snapshot',
       description: `Creates a new snapshot of an org
 
-AGENT INSTRUCTIONS:
+**IMPORTANT - OAuth Mode:**
+This tool is NOT APPLICABLE when the server is running in OAuth mode. OAuth mode provides single-org access via bearer token and does not support DevHub operations or scratch org snapshots. This tool only functions in CLI mode.
+
+**CLI Mode Only - AGENT INSTRUCTIONS:**
 
 Example usage:
 Create a snapshot called 07042025

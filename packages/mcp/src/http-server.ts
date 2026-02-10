@@ -196,6 +196,31 @@ export async function startHttpServer(options: {
   // OAuth middleware validates Bearer token for tool calls (skips initialize/ping/tools/list)
   app.all('/mcp', salesforceOAuthMiddleware, async (req, res) => {
     try {
+      // Log ALL incoming requests with method for debugging
+      console.error(`[HTTP] ════ Incoming ${req.method} /mcp ════`);
+      console.error(`[HTTP]   Accept: ${req.headers.accept || 'none'}`);
+      console.error(`[HTTP]   Content-Type: ${req.headers['content-type'] || 'none'}`);
+      console.error(`[HTTP]   Session: ${req.headers['mcp-session-id'] || 'none'}`);
+
+      // Handle OPTIONS requests (CORS preflight)
+      if (req.method === 'OPTIONS') {
+        console.error('[HTTP] OPTIONS request - CORS preflight');
+        return res.status(204).end();
+      }
+
+      // Handle DELETE requests (session termination - not used in stateless mode)
+      if (req.method === 'DELETE') {
+        console.error('[HTTP] DELETE request - session termination not supported in stateless mode');
+        return res.status(405).json({
+          jsonrpc: '2.0',
+          id: 'server-error',
+          error: {
+            code: -32600,
+            message: 'Method Not Allowed: DELETE not supported in stateless mode'
+          }
+        });
+      }
+
       // Handle HEAD requests for OAuth detection (LibreChat 401 Challenge Method)
       if (req.method === 'HEAD') {
         console.error('[OAuth Detection] ════════════════════════════════════════');
@@ -217,8 +242,116 @@ export async function startHttpServer(options: {
         return res.status(200).end();
       }
 
+      // Pre-validate Accept and Content-Type headers before reaching the transport.
+      // The TypeScript MCP SDK returns error responses WITHOUT Content-Type header,
+      // which causes nginx to return 502 Bad Gateway. By validating here, we can
+      // return proper JSON responses with Content-Type that nginx can proxy.
+      const acceptHeader = req.headers.accept || '';
+
+      if (req.method === 'GET') {
+        // GET requests must accept text/event-stream for SSE
+        console.error(`[HTTP] GET Accept header: "${acceptHeader}"`);
+        if (!acceptHeader.includes('text/event-stream')) {
+          console.error('[HTTP] GET request missing Accept: text/event-stream');
+          return res.status(406).json({
+            jsonrpc: '2.0',
+            id: 'server-error',
+            error: {
+              code: -32600,
+              message: 'Not Acceptable: Client must accept text/event-stream'
+            }
+          });
+        }
+
+        // STATELESS MODE: Handle GET SSE stream without creating a transport.
+        // In stateless mode, there are no server-initiated notifications (no session state),
+        // so we don't need the full transport machinery. We just:
+        // 1. Set up SSE stream with proper headers
+        // 2. Send keepalive pings to prevent proxy timeout
+        // 3. Clean up when client disconnects
+        //
+        // This avoids creating orphaned transports that could accumulate.
+        console.error('[HTTP] GET request - setting up stateless SSE stream (no transport needed)');
+
+        // Set SSE headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
+        res.setHeader('Connection', 'keep-alive');
+        res.status(200);
+
+        // Send initial ping immediately
+        console.error('[HTTP] GET - sending initial SSE ping and starting keepalive');
+        res.write(`: ping - ${new Date().toISOString()}\n\n`);
+
+        // Send keepalive pings every 30 seconds to prevent proxy timeout
+        const keepaliveInterval = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(`: keepalive - ${new Date().toISOString()}\n\n`);
+          } else {
+            clearInterval(keepaliveInterval);
+          }
+        }, 30000);
+
+        // Clean up interval when connection closes
+        res.on('close', () => {
+          console.error('[HTTP] GET SSE stream closed by client');
+          clearInterval(keepaliveInterval);
+        });
+
+        res.on('error', (err) => {
+          console.error('[HTTP] GET SSE stream error:', err.message);
+          clearInterval(keepaliveInterval);
+        });
+
+        // Don't end the response - keep SSE stream open for keepalives
+        // The client will close when it disconnects
+        return;
+      }
+
+      if (req.method === 'POST') {
+        // POST requests must accept both application/json and text/event-stream
+        if (!acceptHeader.includes('application/json') || !acceptHeader.includes('text/event-stream')) {
+          console.error('[HTTP] POST request missing required Accept types');
+          return res.status(406).json({
+            jsonrpc: '2.0',
+            id: 'server-error',
+            error: {
+              code: -32600,
+              message: 'Not Acceptable: Client must accept both application/json and text/event-stream'
+            }
+          });
+        }
+
+        // POST requests must have Content-Type: application/json
+        const contentType = req.headers['content-type'] || '';
+        if (!contentType.includes('application/json')) {
+          console.error('[HTTP] POST request missing Content-Type: application/json');
+          return res.status(415).json({
+            jsonrpc: '2.0',
+            id: 'server-error',
+            error: {
+              code: -32600,
+              message: 'Unsupported Media Type: Content-Type must be application/json'
+            }
+          });
+        }
+      }
+
+      // Catch-all for any unhandled methods (PUT, PATCH, etc.)
+      if (req.method !== 'POST') {
+        console.error(`[HTTP] Unhandled method: ${req.method}`);
+        return res.status(405).json({
+          jsonrpc: '2.0',
+          id: 'server-error',
+          error: {
+            code: -32600,
+            message: `Method Not Allowed: ${req.method} not supported`
+          }
+        });
+      }
+
       // Log MCP method calls
-      if (req.method === 'POST' && req.body?.method) {
+      if (req.body?.method) {
         const method = req.body.method;
         const params = req.body.params;
         if (method === 'tools/list') {
@@ -231,7 +364,16 @@ export async function startHttpServer(options: {
         }
       }
 
-      // Handle the request (stateless transport shared across all clients)
+      // Handle JSON-RPC notifications (no id field) with proper Content-Type header.
+      // The TypeScript SDK returns 202 without Content-Type, which causes nginx 502.
+      // Notifications are fire-and-forget, so we just acknowledge receipt.
+      // We handle this ourselves instead of passing to transport to ensure proper headers.
+      if (req.body?.method && req.body?.id === undefined) {
+        console.error(`[HTTP] Notification detected: ${req.body.method} - returning 202 with proper headers`);
+        return res.status(202).set('Content-Type', 'application/json').end();
+      }
+
+      // Handle POST requests with shared transport (works fine for stateless mode)
       await transport.handleRequest(req, res, req.body);
 
     } catch (error) {

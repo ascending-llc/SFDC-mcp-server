@@ -127,9 +127,10 @@ EXAMPLE USAGE:
       const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
 
       // jsforce update requires Id in the record object
+      // Spread fields first, then Id - ensures Id cannot be overridden by fields
       const updateRecord = {
-        Id: input.recordId,
         ...input.fields,
+        Id: input.recordId,
       } as { Id: string } & Record<string, unknown>;
       const result = await connection.sobject(input.objectType).update(updateRecord);
 
@@ -144,6 +145,15 @@ EXAMPLE USAGE:
       return textResponse(`Successfully updated ${input.objectType} record with ID: ${result.id}`);
     } catch (error) {
       const e = error as Error;
+      // Check for cross-reference error (recordId doesn't match objectType)
+      if (e.message?.includes('INVALID_CROSS_REFERENCE_KEY')) {
+        return textResponse(
+          `Error: The record ID "${input.recordId}" does not appear to be a valid ${input.objectType} record. ` +
+          `Salesforce record IDs have prefixes that identify the object type. ` +
+          `Please verify the record ID belongs to a ${input.objectType} record.`,
+          true
+        );
+      }
       return textResponse(`Error updating ${input.objectType} record: ${e.name}: ${e.message}`, true);
     }
   }

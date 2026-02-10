@@ -130,6 +130,15 @@ EXAMPLE USAGE:
       return textResponse(`Successfully deleted ${input.objectType} record with ID: ${result.id}`);
     } catch (error) {
       const e = error as Error;
+      // Check for cross-reference error (recordId doesn't match objectType)
+      if (e.message?.includes('INVALID_CROSS_REFERENCE_KEY')) {
+        return textResponse(
+          `Error: The record ID "${input.recordId}" does not appear to be a valid ${input.objectType} record. ` +
+          `Salesforce record IDs have prefixes that identify the object type. ` +
+          `Please verify the record ID belongs to a ${input.objectType} record.`,
+          true
+        );
+      }
       return textResponse(`Error deleting ${input.objectType} record: ${e.name}: ${e.message}`, true);
     }
   }
