@@ -51,3 +51,4 @@ node_modules
 CLAUDE.md
 OAUTH_TROUBLESHOOTING.md
 .vscode/
+.vscode/mcp.json

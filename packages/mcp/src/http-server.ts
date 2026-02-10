@@ -114,7 +114,7 @@ export async function startHttpServer(options: {
   // Connect server to transport
   await mcpServer.connect(transport);
   console.error('[HTTP] Stateless server ready - all clients share this instance');
-  console.error('[HTTP] ⚠️  Multi-tenant isolation via AsyncLocalStorage per-request');
+  console.error('[HTTP] Warning: Multi-tenant isolation via AsyncLocalStorage per-request');
 
   // Health check endpoint
   app.get('/', (_req, res) => {
