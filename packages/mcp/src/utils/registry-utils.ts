@@ -29,12 +29,19 @@ import {
 // Tools that only require Salesforce API access (OAuth token)
 // No file system or CLI dependencies - safe for cloud/serverless environments
 const API_ONLY_TOOLS = new Set([
-  // GA tools
+  // GA tools - query/read
   'run_soql_query',
   'list_all_orgs',
   'get_username',
+  'describe_object',
+  'search_records',
+  'get_record',
+  // GA tools - write
   'assign_permission_set',
   'run_apex_test',
+  'create_record',
+  'update_record',
+  'delete_record',
   // NON_GA tools (require --allow-non-ga-tools flag)
   'list_devops_center_projects',
   'list_devops_center_work_items',

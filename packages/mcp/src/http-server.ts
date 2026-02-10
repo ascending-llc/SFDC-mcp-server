@@ -15,7 +15,6 @@
  */
 
 import express from 'express';
-import { randomUUID } from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Toolset } from '@salesforce/mcp-provider-api';
 import { SfMcpServer } from './sf-mcp-server.js';
@@ -25,10 +24,6 @@ import Cache from './utils/cache.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import { salesforceOAuthMiddleware } from './middleware/oauth-middleware.js';
-
-// Session storage for multi-user support
-const transports = new Map<string, StreamableHTTPServerTransport>();
-const mcpServers = new Map<string, SfMcpServer>();
 
 /**
  * Create a new MCP server instance for a session
@@ -89,15 +84,47 @@ export async function startHttpServer(options: {
     next();
   });
 
+  // STATELESS MODE: Pre-create server and transport at startup
+  console.error('[HTTP] Creating stateless server and transport...');
+  
+  // Clear tool cache
+  await Cache.safeSet('tools', []);
+  await Cache.safeSet('allowedOrgs', options.allowedOrgs);
+
+  // Create MCP server with tools registered
+  const startTime = Date.now();
+  const mcpServer = await createMcpServer(
+    options.config,
+    { telemetry: options.telemetry },
+    options.toolsets,
+    options.tools,
+    options.dynamicTools,
+    options.allowNonGaTools,
+    options.apiOnly,
+    options.services
+  );
+  const registrationTime = Date.now() - startTime;
+  console.error(`[HTTP] Tool registration took ${registrationTime}ms`);
+
+  // Create stateless transport (no session management)
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+
+  // Connect server to transport
+  await mcpServer.connect(transport);
+  console.error('[HTTP] Stateless server ready - all clients share this instance');
+  console.error('[HTTP] ⚠️  Multi-tenant isolation via AsyncLocalStorage per-request');
+
   // Health check endpoint
   app.get('/', (_req, res) => {
     const healthData = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      transport: 'streamable-http',
-      sessions: transports.size
+      transport: 'streamable-http-stateless',
+      mode: 'stateless'
     };
-    console.error(`[HTTP] Health check - ${transports.size} active sessions`);
+    console.error(`[HTTP] Health check - stateless mode`);
     res.json(healthData);
   });
 
@@ -105,16 +132,37 @@ export async function startHttpServer(options: {
     const healthData = {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      transport: 'streamable-http',
-      sessions: transports.size
+      transport: 'streamable-http-stateless',
+      mode: 'stateless'
     };
-    console.error(`[HTTP] Health check (POST) - ${transports.size} active sessions`);
+    console.error(`[HTTP] Health check (POST) - stateless mode`);
     res.json(healthData);
   });
 
   // OAuth Protected Resource Metadata - RFC 9728
-  // Tells jarvis that this server requires OAuth and where to get tokens
-  app.get('/.well-known/oauth-protected-resource', (req, res) => {
+  // Tells clients that this server requires OAuth and where to get tokens
+  // IMPORTANT: If client already has a Bearer token, return 404 to skip OAuth discovery
+  // This allows VS Code/clients with static tokens to use them instead of starting OAuth flow
+  // 
+  // NOTE: This handler is registered at BOTH root and /mcp paths to support:
+  //   - Direct connections: /.well-known/oauth-protected-resource
+  //   - Gateway proxying: /mcp/.well-known/oauth-protected-resource
+  const oauthDiscoveryHandler = (req: express.Request, res: express.Response) => {
+    const authHeader = req.headers['authorization'];
+
+    // If client already has a Bearer token, return 404 to indicate OAuth isn't needed
+    // This prevents VS Code from starting OAuth flow when a static token is configured
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      console.error('[OAuth Discovery] ════════════════════════════════════════');
+      console.error('[OAuth Discovery] Client already has Bearer token - skipping OAuth discovery');
+      console.error('[OAuth Discovery] Returning 404 to use existing token');
+      console.error('[OAuth Discovery] ════════════════════════════════════════');
+      return res.status(404).json({
+        error: 'not_found',
+        error_description: 'OAuth discovery not needed - Bearer token already provided'
+      });
+    }
+
     const salesforceAuthServer = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
 
     // Use localhost for resource URL instead of 0.0.0.0 (which is not a valid client URL)
@@ -130,28 +178,24 @@ export async function startHttpServer(options: {
 
     console.error('[OAuth Discovery] ════════════════════════════════════════');
     console.error('[OAuth Discovery] RFC 9728 metadata requested');
+    console.error('[OAuth Discovery] Path:', req.path);
     console.error('[OAuth Discovery] Client:', req.headers['user-agent'] || 'unknown');
     console.error('[OAuth Discovery] Returning:', JSON.stringify(metadata, null, 2));
     console.error('[OAuth Discovery] ════════════════════════════════════════');
 
     res.json(metadata);
-  });
+  };
 
-  // Main MCP endpoint - handles GET (SSE), POST (requests), DELETE (cleanup)
+  // Register OAuth discovery at root (direct connections)
+  app.get('/.well-known/oauth-protected-resource', oauthDiscoveryHandler);
+
+  // Register OAuth discovery under /mcp path (gateway proxying)
+  app.get('/mcp/.well-known/oauth-protected-resource', oauthDiscoveryHandler);
+
+  // Main MCP endpoint - handles POST (requests) in stateless mode
   // OAuth middleware validates Bearer token for tool calls (skips initialize/ping/tools/list)
   app.all('/mcp', salesforceOAuthMiddleware, async (req, res) => {
-    const sessionId = req.headers['mcp-session-id'] as string | undefined;
-
     try {
-      let transport = sessionId ? transports.get(sessionId) : undefined;
-
-      // DEBUG: Log session lookup
-      console.error(`[HTTP] [OAUTH-DEBUG] Session lookup: sessionId=${sessionId || 'none'}, found=${!!transport}, transportsMapSize=${transports.size}`);
-      if (sessionId && !transport) {
-        console.error(`[HTTP] [OAUTH-DEBUG] WARNING: Session ID provided but not found in transports map!`);
-        console.error(`[HTTP] [OAUTH-DEBUG] Available sessions: ${Array.from(transports.keys()).join(', ') || 'none'}`);
-      }
-
       // Handle HEAD requests for OAuth detection (LibreChat 401 Challenge Method)
       if (req.method === 'HEAD') {
         console.error('[OAuth Detection] ════════════════════════════════════════');
@@ -173,105 +217,21 @@ export async function startHttpServer(options: {
         return res.status(200).end();
       }
 
-      // NEW SESSION: Initialize request without session ID
-      if (!sessionId && req.method === 'POST') {
-        const body = req.body;
-
-        // Only create session on initialize request
-        if (body.method === 'initialize') {
-          console.error(`[HTTP] Incoming initialize request - creating new session`);
-          transport = new StreamableHTTPServerTransport({
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: async (newSessionId) => {
-              console.error(`[HTTP] [OAUTH-DEBUG] onsessioninitialized STARTING for: ${newSessionId}`);
-              console.error(`[HTTP]  Session initialized: ${newSessionId}`);
-
-              // Clear tool cache for new session (allows each session to register tools)
-              await Cache.safeSet('tools', []);
-              await Cache.safeSet('allowedOrgs', options.allowedOrgs);
-
-              // Create MCP server for this session
-              const server = await createMcpServer(
-                options.config,
-                { telemetry: options.telemetry },
-                options.toolsets,
-                options.tools,
-                options.dynamicTools,
-                options.allowNonGaTools,
-                options.apiOnly,
-                options.services
-              );
-
-              mcpServers.set(newSessionId, server);
-              transports.set(newSessionId, transport!);
-              console.error(`[HTTP] [OAUTH-DEBUG] Session ${newSessionId} stored in transports map, mapSize=${transports.size}`);
-
-              // Connect server to transport
-              await server.connect(transport!);
-              console.error(`[HTTP] Session ${newSessionId} ready - tools registered`);
-              console.error(`[HTTP] [OAUTH-DEBUG] onsessioninitialized COMPLETE for: ${newSessionId}`);
-            },
-            onsessionclosed: async (closedSessionId) => {
-              console.error(`[HTTP]  Session closed: ${closedSessionId}`);
-              transports.delete(closedSessionId);
-              mcpServers.delete(closedSessionId);
-            }
-          });
-        } else {
-          // Invalid or empty request without session - return 401 for OAuth detection
-          // LibreChat sends POST with empty body {} to detect OAuth requirement
-          console.error('[OAuth Detection] ════════════════════════════════════════');
-          console.error('[OAuth Detection] POST with invalid/empty body (OAuth probe)');
-          console.error('[OAuth Detection] Body:', JSON.stringify(body));
-          console.error('[OAuth Detection] Returning 401 to trigger OAuth flow');
-          const baseUrl = `http://${req.get('host')}`;
-          const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required. Initialize with valid session first.", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
-          console.error('[OAuth Detection] WWW-Authenticate:', wwwAuth);
-          console.error('[OAuth Detection] ════════════════════════════════════════');
-          return res
-            .status(401)
-            .setHeader('WWW-Authenticate', wwwAuth)
-            .json({
-              code: 401,
-              message: 'Unauthorized: OAuth authentication required',
-              error: 'invalid_token',
-              error_description: 'OAuth authentication required'
-            });
-        }
-      }
-      // EXISTING SESSION: Validate and use
-      else if (!transport) {
-        console.error(`[HTTP]  Invalid session ID: ${sessionId || 'missing'}`);
-        res.status(400).json({
-          jsonrpc: '2.0',
-          error: {
-            code: -32000,
-            message: 'Invalid or missing session ID'
-          },
-          id: req.body?.id ?? null
-        });
-        return;
-      }
-
       // Log MCP method calls
       if (req.method === 'POST' && req.body?.method) {
         const method = req.body.method;
         const params = req.body.params;
         if (method === 'tools/list') {
-          console.error(`[HTTP]  Session ${sessionId}: tools/list`);
+          console.error(`[HTTP]  Stateless: tools/list`);
         } else if (method === 'tools/call') {
           const toolName = params?.name || 'unknown';
-          console.error(`[HTTP]  Session ${sessionId}: tools/call -> ${toolName}`);
-        } else if (method !== 'initialize') {
-          console.error(`[HTTP]  Session ${sessionId}: ${method}`);
+          console.error(`[HTTP]  Stateless: tools/call -> ${toolName}`);
+        } else {
+          console.error(`[HTTP]  Stateless: ${method}`);
         }
-      } else if (req.method === 'GET') {
-        console.error(`[HTTP]  Session ${sessionId}: SSE stream request`);
-      } else if (req.method === 'DELETE') {
-        console.error(`[HTTP]   Session ${sessionId}: DELETE (closing)`);
       }
 
-      // Handle the request (transport handles GET/POST/DELETE automatically)
+      // Handle the request (stateless transport shared across all clients)
       await transport.handleRequest(req, res, req.body);
 
     } catch (error) {
@@ -296,7 +256,7 @@ export async function startHttpServer(options: {
       console.error(` Salesforce MCP Server v${options.config.version} running on http://${options.host}:${options.port}`);
       console.error(`   Health check: http://${options.host}:${options.port}/`);
       console.error(`   MCP endpoint: http://${options.host}:${options.port}/mcp`);
-      console.error(`   Transport: StreamableHTTP with SSE`);
+      console.error(`   Transport: StreamableHTTP with SSE (stateless)`);
       resolve();
     });
 

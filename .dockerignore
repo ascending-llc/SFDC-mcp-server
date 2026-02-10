@@ -1,0 +1,38 @@
+.git
+.gitignore
+.github
+.vscode
+.idea
+.DS_Store
+
+# Dependencies
+node_modules
+**/node_modules
+
+# Build/test outputs
+dist
+lib
+**/dist
+**/lib
+coverage
+.nyc_output
+*.tsbuildinfo
+.wireit
+.eslintcache
+
+# Logs
+npm-error.log
+yarn-error.log
+lerna-debug.log
+*.log
+
+# Local tooling/state
+.sfdx
+.sf
+.cache
+.env
+.env.*
+
+# Docs (not needed for image build)
+docs
+Docs
