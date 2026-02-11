@@ -20,7 +20,6 @@ import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/typ
 export interface RequestContext {
   extra: RequestHandlerExtra<ServerRequest, ServerNotification>;
   transportMode: 'http' | 'stdio';
-  requestId?: string;
 }
 
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();

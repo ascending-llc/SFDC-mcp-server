@@ -19,7 +19,7 @@ import { McpTool, McpToolConfig, OrgConfigInfo, ReleaseState, Services, Toolset 
 import { CallToolResult, ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { type OrgService } from '@salesforce/mcp-provider-api';
-import { textResponse } from '../shared/utils.js';
+import { textResponse, isHttpTransport } from '../shared/utils.js';
 import { directoryParam } from '../shared/params.js';
 import { type ToolTextResponse } from '../shared/types.js';
 
@@ -110,10 +110,7 @@ export class GetUsernameMcpTool extends McpTool<InputArgsShape, OutputArgsShape>
       title: 'Get Username',
       description: `Intelligently determines the appropriate username or alias for Salesforce operations.
 
-**IMPORTANT - OAuth Mode:**
-This tool is NOT APPLICABLE when the server is running in OAuth mode. In OAuth mode, authentication is handled via bearer tokens and org selection is automatic. This tool only functions in CLI mode where multiple orgs can be configured.
-
-**CLI Mode Only - WHEN TO USE THIS TOOL:**
+WHEN TO USE THIS TOOL:
 - When uncertain which org username a user wants for Salesforce operations.
 - To resolve the default org username, set the defaultTargetOrg param to true and defaultDevHub to false.
 - To resolve the default devhub org username, set the defaultTargetOrg param to false and defaultDevHub to true.
@@ -132,16 +129,7 @@ This tool is NOT APPLICABLE when the server is running in OAuth mode. In OAuth m
     input: InputArgs,
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
-    // Check for OAuth mode by looking for Bearer token in headers
-    const headers = extra?.requestInfo?.headers as Record<string, string | string[]> | undefined;
-    const authHeader = headers?.['authorization'];
-    const isOAuthMode = authHeader && (
-      typeof authHeader === 'string'
-        ? authHeader.startsWith('Bearer ')
-        : authHeader[0]?.startsWith('Bearer ')
-    );
-
-    if (isOAuthMode) {
+    if (isHttpTransport(extra)) {
       return textResponse(
         `**OAuth Mode Active**\n\n` +
         `Authentication is handled automatically via your bearer token. You do not need to resolve usernames.\n\n` +

@@ -17,6 +17,8 @@
 /* eslint-disable no-console */
 
 import path from 'node:path';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { type ToolTextResponse } from './types.js';
 
 // TODO: break into two helpers? One for errors and one for success?
@@ -53,4 +55,22 @@ export function sanitizePath(projectPath: string): boolean {
     path.isAbsolute(projectPath) && (process.platform === 'win32' ? !projectPath.startsWith('\\') : true);
 
   return !hasTraversal && isAbsolute;
+}
+
+/**
+ * Detects if the current request is coming through HTTP transport (OAuth mode).
+ * In HTTP mode, extra.requestInfo.headers is populated by the MCP SDK.
+ * In stdio mode (CLI), headers are not present.
+ *
+ * Alternative (stricter Bearer token check) if this proves unreliable:
+ *   const headers = extra?.requestInfo?.headers as Record<string, string | string[]> | undefined;
+ *   const authHeader = headers?.['authorization'];
+ *   return !!(authHeader && (typeof authHeader === 'string'
+ *     ? authHeader.startsWith('Bearer ')
+ *     : authHeader[0]?.startsWith('Bearer ')));
+ */
+export function isHttpTransport(
+  extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+): boolean {
+  return !!extra?.requestInfo?.headers;
 }

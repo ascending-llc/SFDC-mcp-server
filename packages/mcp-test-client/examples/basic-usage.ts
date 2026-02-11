@@ -27,7 +27,7 @@ async function testCalculatorServer() {
     });
     
     await client.connect(transport);
-    console.log(" Connected to calculator server");
+    console.log("✅ Connected to calculator server");
 
     // Test addition tool
     const result = await client.callTool(addSchema, {
@@ -41,16 +41,16 @@ async function testCalculatorServer() {
     // expect(result.content[0].text).toBe("8");
     
     if (result.content?.[0]?.text === "8") {
-      console.log(" Addition test passed!");
+      console.log("✅ Addition test passed!");
     } else {
-      console.log(" Addition test failed!");
+      console.log("❌ Addition test failed!");
     }
 
   } catch (error) {
-    console.error(" Test failed:", error);
+    console.error("❌ Test failed:", error);
   } finally {
     await client.disconnect();
-    console.log(" Disconnected from server");
+    console.log("✅ Disconnected from server");
   }
 }
 

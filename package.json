@@ -7,7 +7,7 @@
       "packages/*"
     ],
     "nohoist": [
-      "**/mcp-provider-code-analyzer/**"
+      "**"
     ]
   },
   "devDependencies": {

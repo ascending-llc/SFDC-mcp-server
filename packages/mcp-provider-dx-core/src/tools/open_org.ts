@@ -58,10 +58,6 @@ export class OrgOpenMcpTool extends McpTool<InputArgsShape, OutputArgsShape> {
       title: 'Open Org in Browser',
       description: `Open a Salesforce org in the browser.
 
-**IMPORTANT - OAuth Mode:**
-This tool is NOT APPLICABLE when the server is running in OAuth mode. OAuth mode uses bearer tokens and cannot open browser sessions for orgs. This tool only functions in CLI mode with locally authorized orgs.
-
-**CLI Mode Only:**
 You can specify a metadata file you want to open.`,
       inputSchema: orgOpenParamsSchema.shape,
       outputSchema: undefined,

@@ -1,3 +1,5 @@
+# -- CLEAN
+
 # use yarn by default, so ignore npm
 package-lock.json
 
@@ -39,6 +41,7 @@ node_modules
 
 # --
 # put files here you don't want cleaned with sf-clean
+
 .sfdx
 
 # os specific files
@@ -49,6 +52,4 @@ node_modules
 .cursor
 CLAUDE.md
 OAUTH_TROUBLESHOOTING.md
-.vscode/
-.vscode/mcp.json
 .env

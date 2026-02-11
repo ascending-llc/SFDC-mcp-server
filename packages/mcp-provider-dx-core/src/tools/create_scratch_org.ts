@@ -116,10 +116,7 @@ export class CreateScratchOrgMcpTool extends McpTool<InputArgsShape, OutputArgsS
       title: 'Create a scratch org',
       description: `Creates a scratch org with the specified parameters.
 
-**IMPORTANT - OAuth Mode:**
-This tool is NOT APPLICABLE when the server is running in OAuth mode. OAuth mode provides single-org access via bearer token and does not support DevHub operations or CLI-based org creation. This tool only functions in CLI mode.
-
-**CLI Mode Only - AGENT INSTRUCTIONS:**
+AGENT INSTRUCTIONS:
 
 Example usage:
 Create a scratch org

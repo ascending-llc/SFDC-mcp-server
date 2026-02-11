@@ -85,10 +85,7 @@ export class AssignPermissionSetMcpTool extends McpTool<InputArgsShape, OutputAr
   public getConfig(): McpToolConfig<InputArgsShape, OutputArgsShape> {
     return {
       title: 'Assign Permission Set',
-      description: `Assign a permission set to one or more org users.
-
-**IMPORTANT - OAuth Mode:**
-This tool is NOT APPLICABLE when the server is running in OAuth mode. The tool uses StateAggregator to resolve aliases, which is a CLI-based mechanism. In OAuth mode, alias resolution is not available. This tool only functions in CLI mode.`,
+      description: 'Assign a permission set to one or more org users.',
       inputSchema: assignPermissionSetParamsSchema.shape,
       outputSchema: undefined,
       annotations: {

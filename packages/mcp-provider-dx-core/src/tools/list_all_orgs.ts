@@ -18,7 +18,7 @@ import { z } from 'zod';
 import { McpTool, McpToolConfig, ReleaseState, Services, Toolset } from '@salesforce/mcp-provider-api';
 import { CallToolResult, ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
-import { textResponse } from '../shared/utils.js';
+import { textResponse, isHttpTransport } from '../shared/utils.js';
 import { directoryParam } from '../shared/params.js';
 
 /*
@@ -63,10 +63,7 @@ export class ListAllOrgsMcpTool extends McpTool<InputArgsShape, OutputArgsShape>
       title: 'List All Orgs',
       description: `Lists all configured Salesforce orgs.
 
-**IMPORTANT - OAuth Mode:**
-This tool is NOT APPLICABLE when the server is running in OAuth mode. In OAuth mode, each client connection is authenticated to a single org via bearer token - there is no concept of "multiple orgs" to list. This tool only functions in CLI mode.
-
-**CLI Mode Only - AGENT INSTRUCTIONS:**
+AGENT INSTRUCTIONS:
 DO NOT use this tool to try to determine which org a user wants, use #get_username instead. Only use it if the user explicitly asks for a list of orgs.
 
 Example usage:
@@ -86,16 +83,7 @@ List all orgs`,
     input: InputArgs,
     extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
   ): Promise<CallToolResult> {
-    // Check for OAuth mode by looking for Bearer token in headers
-    const headers = extra?.requestInfo?.headers as Record<string, string | string[]> | undefined;
-    const authHeader = headers?.['authorization'];
-    const isOAuthMode = authHeader && (
-      typeof authHeader === 'string'
-        ? authHeader.startsWith('Bearer ')
-        : authHeader[0]?.startsWith('Bearer ')
-    );
-
-    if (isOAuthMode) {
+    if (isHttpTransport(extra)) {
       return textResponse(
         `**OAuth Mode Active**\n\n` +
         `You're connected to a single Salesforce org via bearer token. There are no multiple orgs to list.\n\n` +

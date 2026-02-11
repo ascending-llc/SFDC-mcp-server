@@ -23,7 +23,13 @@ import {
   StartupFlags,
 } from '@salesforce/mcp-provider-api';
 import Cache from './utils/cache.js';
-import { getConnection } from './utils/auth.js';
+import {
+  getConnection,
+  getDefaultTargetOrg,
+  getDefaultTargetDevHub,
+  getAllAllowedOrgs,
+  findOrgByUsernameOrAlias,
+} from './utils/auth.js';
 
 export class Services implements IServices {
   private readonly telemetry: TelemetryService;
@@ -50,26 +56,12 @@ export class Services implements IServices {
   public getOrgService(): OrgService {
     return {
       getAllowedOrgUsernames: async () => Cache.safeGet('allowedOrgs'),
+      getAllowedOrgs: () => getAllAllowedOrgs(),
       getConnection: (username: string) => getConnection(username),
-
-      // OAuth-only mode: Legacy CLI auth functions not supported
-      // These functions are kept for backward compatibility but return empty/error values
-      getAllowedOrgs: () => {
-        console.error('[Services]   getAllowedOrgs() not supported in OAuth-only mode');
-        return Promise.resolve([]);
-      },
-      getDefaultTargetOrg: () => {
-        console.error('[Services]   getDefaultTargetOrg() not supported in OAuth-only mode');
-        return Promise.resolve(undefined);
-      },
-      getDefaultTargetDevHub: () => {
-        console.error('[Services]   getDefaultTargetDevHub() not supported in OAuth-only mode');
-        return Promise.resolve(undefined);
-      },
-      findOrgByUsernameOrAlias: (_allOrgs: SanitizedOrgAuthorization[], _usernameOrAlias: string) => {
-        console.error('[Services]   findOrgByUsernameOrAlias() not supported in OAuth-only mode');
-        return undefined;
-      },
+      getDefaultTargetOrg: () => getDefaultTargetOrg(),
+      getDefaultTargetDevHub: () => getDefaultTargetDevHub(),
+      findOrgByUsernameOrAlias: (allOrgs: SanitizedOrgAuthorization[], usernameOrAlias: string) =>
+        findOrgByUsernameOrAlias(allOrgs, usernameOrAlias),
     };
   }
 }

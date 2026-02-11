@@ -88,7 +88,7 @@ Then follow the steps for the type of testing you want to do: from the browser o
 4. Click the `Connect` button; you should see this message in the bottom-left panel:
 
    ```
-    Salesforce MCP Server running on stdio
+   ✅ Salesforce MCP Server running on stdio
    ```
 
 5. Click `List Tools`, then select one of the tools, fill the required parameters, and click `Run Tool`.

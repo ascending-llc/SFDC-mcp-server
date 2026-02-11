@@ -183,11 +183,16 @@ Tools requiring workspace access or CLI binaries will be skipped.`,
   private telemetry?: Telemetry;
 
   public async run(): Promise<void> {
-    // Install chdir shim early - makes process.chdir() a no-op in OAuth-only mode
-    // This prevents crashes when tools or SDK code tries to change directories
-    installChdirShim();
-
     const { flags } = await this.parse(McpServerCommand);
+
+    // Install chdir shim only in HTTP mode - prevents tools from changing directories
+    // in multi-tenant cloud deployment. CLI mode needs real chdir for directory-based config.
+    if (flags.transport === 'http') {
+      installChdirShim();
+      // Enforce api-only in HTTP mode - non-API tools need filesystem/CLI access
+      // which is not available in multi-tenant cloud deployments
+      flags['api-only'] = true;
+    }
 
     if (!flags['no-telemetry']) {
       this.telemetry = new Telemetry(this.config, {
@@ -237,22 +242,12 @@ Tools requiring workspace access or CLI binaries will be skipped.`,
       },
     });
 
-    await registerToolsets(
-      flags.toolsets ?? [],
-      flags.tools ?? [],
-      flags['dynamic-tools'] ?? false,
-      flags['allow-non-ga-tools'] ?? false,
-      flags['api-only'] ?? false,
-      server,
-      services
-    );
-
     // Select transport mode
     if (flags.transport === 'http') {
       const httpHost = flags['http-host'] ?? process.env.SF_MCP_HTTP_HOST ?? '0.0.0.0';
       const httpPort = flags['http-port'] ?? parseInt(process.env.SF_MCP_HTTP_PORT ?? '3336', 10);
 
-      // Start HTTP server with StreamableHTTP transport
+      // HTTP mode: startHttpServer creates its own server and registers tools internally
       await startHttpServer({
         host: httpHost,
         port: httpPort,
@@ -279,6 +274,17 @@ Tools requiring workspace access or CLI binaries will be skipped.`,
         // This promise never resolves, keeping the server running
       });
     } else {
+      // stdio mode: register tools on the server created above
+      await registerToolsets(
+        flags.toolsets ?? [],
+        flags.tools ?? [],
+        flags['dynamic-tools'] ?? false,
+        flags['allow-non-ga-tools'] ?? false,
+        flags['api-only'] ?? false,
+        server,
+        services
+      );
+
       const transport = new StdioServerTransport();
       await server.connect(transport);
 

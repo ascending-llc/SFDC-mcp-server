@@ -106,12 +106,8 @@ export class SfMcpServer extends McpServer implements ToolMethodSignatures {
     ): Promise<CallToolResult> => {
       this.logger.debug(`Tool ${name} called`);
 
-      // Detect transport mode from extra parameter
-      // HTTP transport includes requestInfo.headers, stdio does not
+      // Detect transport mode: HTTP transport includes requestInfo.headers, stdio does not
       const transportMode = extra?.requestInfo?.headers ? 'http' : 'stdio';
-      const requestId = (extra as any)?.id ?? 'unknown';
-
-      console.error(`[SfMcpServer]  Tool ${name} - Transport: ${transportMode}, Request: ${requestId}`);
 
       // Check rate limit before executing tool
       if (this.rateLimiter) {
@@ -142,13 +138,11 @@ export class SfMcpServer extends McpServer implements ToolMethodSignatures {
         this.logger.debug(`Tool ${name} rate check passed. Remaining: ${rateLimitResult.remaining}`);
       }
 
-      // Execute tool with AsyncLocalStorage context for OAuth-only mode
-      // This enables tools to access OAuth from AsyncLocalStorage without extra parameter
+      // Wrap execution in AsyncLocalStorage context so getConnection() can detect transport mode
       return runWithContext(
         {
           extra,
           transportMode,
-          requestId,
         },
         async () => {
           const startTime = Date.now();

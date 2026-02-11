@@ -63,10 +63,7 @@ export class DeleteOrgMcpTool extends McpTool<InputArgsShape, OutputArgsShape> {
       title: 'Delete an Org',
       description: `Deletes specified salesforce org.
 
-**IMPORTANT - OAuth Mode:**
-This tool is NOT APPLICABLE when the server is running in OAuth mode. OAuth mode does not manage local org authorizations - it uses bearer tokens for single-org access. This tool only functions in CLI mode where local org authorizations can be deleted.
-
-**CLI Mode Only - AGENT INSTRUCTIONS:**
+AGENT INSTRUCTIONS:
 ALWAYS confirm with the user before deleting an org
 
 Example usage:

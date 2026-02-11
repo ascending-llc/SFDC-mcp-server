@@ -14,9 +14,11 @@
  * limitations under the License.
  */
 
-import { type Connection, type OrgAuthorization } from '@salesforce/core';
-import { type SanitizedOrgAuthorization } from '@salesforce/mcp-provider-api';
+import { AuthInfo, Connection, ConfigAggregator, OrgConfigProperties, type OrgAuthorization } from '@salesforce/core';
+import { type OrgConfigInfo, type SanitizedOrgAuthorization } from '@salesforce/mcp-provider-api';
+import Cache from './cache.js';
 import { createOAuthConnection } from './auth-helper.js';
+import { getRequestContext } from './request-context.js';
 
 /**
  * Sanitizes org authorization data by filtering out sensitive fields
@@ -39,122 +41,121 @@ export function sanitizeOrgs(orgs: OrgAuthorization[]): SanitizedOrgAuthorizatio
   }));
 }
 
-/**
- * Gets a Salesforce connection using OAuth authentication from AsyncLocalStorage.
- *
- * OAuth-Only Mode:
- * This function ONLY supports OAuth authentication via AsyncLocalStorage.
- * CLI-based authentication (sf org display) is NOT supported.
- *
- * The server is designed for multi-tenant cloud deployment where:
- * - Each user authenticates with their own OAuth token (Authorization: Bearer <token>)
- * - No local filesystem access to .sf/ directory or CLI credentials
- * - Stateless per-request authentication
- *
- * Architecture:
- * 1. HTTP request arrives with Authorization: Bearer <token> header
- * 2. OAuth middleware validates the token
- * 3. MCP SDK creates RequestHandlerExtra with headers
- * 4. sf-mcp-server.ts wrapper stores context in AsyncLocalStorage
- * 5. THIS FUNCTION reads OAuth from AsyncLocalStorage and creates connection
- *
- * Multi-Tenant Safety:
- * - Each request has isolated AsyncLocalStorage context
- * - No shared state between users
- * - Each user's OAuth token creates independent connection
- *
- * @param username - Username or alias (not used in OAuth-only mode, kept for backward compatibility)
- * @returns Salesforce Connection authenticated with OAuth token
- * @throws Error if OAuth context not available in AsyncLocalStorage
- */
+// This function is the main entry point for Tools to get an allowlisted Connection
+// Dual-mode: checks AsyncLocalStorage for HTTP/OAuth context first, falls back to CLI auth
 export async function getConnection(username: string): Promise<Connection> {
-  console.error(`[Auth]  getConnection called for username: ${username}`);
-
-  // OAuth-only mode - check AsyncLocalStorage for OAuth context
-  const oauthConnection = await createOAuthConnection();
-
-  if (!oauthConnection) {
-    const errorMsg =
-      'OAuth authentication required. No OAuth context found in request. ' +
-      'Please ensure Authorization: Bearer <token> header is provided. ' +
-      'CLI-based authentication is not supported in OAuth-only mode.';
-    console.error(`[Auth]  ${errorMsg}`);
-    throw new Error(errorMsg);
+  // Check if we're in HTTP mode via AsyncLocalStorage
+  const context = getRequestContext();
+  if (context?.transportMode === 'http') {
+    const oauthConn = await createOAuthConnection();
+    if (oauthConn) return oauthConn;
+    throw new Error(
+      'OAuth authentication required but no token found in request headers. ' +
+      'Ensure Authorization: Bearer <token> header is provided.'
+    );
   }
 
-  console.error(`[Auth]  Using OAuth connection from AsyncLocalStorage`);
-  return oauthConnection;
+  // CLI mode: use local SF CLI credentials
+  const allOrgs = await getAllAllowedOrgs();
+  const foundOrg = findOrgByUsernameOrAlias(allOrgs, username);
+
+  if (!foundOrg)
+    return Promise.reject(
+      new Error(
+        'No org found with the provided username/alias. Ask the user to specify one or check their MCP Server startup config.'
+      )
+    );
+
+  const authInfo = await AuthInfo.create({ username: foundOrg.username });
+  const connection = await Connection.create({ authInfo });
+  return connection;
 }
 
-/*
- * ============================================================================
- * LEGACY CLI AUTH FUNCTIONS - NOT USED IN OAUTH-ONLY MODE
- * ============================================================================
- *
- * The functions below were used for CLI-based authentication (sf org display).
- * They are commented out because the server now operates in OAuth-only mode
- * for multi-tenant cloud deployment.
- *
- * Kept for reference in case hybrid auth mode is needed in the future.
- * ============================================================================
- */
-
-/*
 export function findOrgByUsernameOrAlias(
   allOrgs: SanitizedOrgAuthorization[],
   usernameOrAlias: string
 ): SanitizedOrgAuthorization | undefined {
   return allOrgs.find((org) => {
+    // Check if the org's username or alias matches the provided usernameOrAlias
     const isMatchingUsername = org.username === usernameOrAlias;
     const isMatchingAlias = org.aliases && Array.isArray(org.aliases) && org.aliases.includes(usernameOrAlias);
+
     return isMatchingUsername || isMatchingAlias;
   });
 }
 
 export async function getAllAllowedOrgs(): Promise<SanitizedOrgAuthorization[]> {
   const orgAllowList = (await Cache.safeGet('allowedOrgs')) ?? new Set<string>();
+  // Get all orgs on the user's machine
   const allOrgs = await AuthInfo.listAllAuthorizations();
+
+  // Sanitize the orgs to remove sensitive data
   const sanitizedOrgs = sanitizeOrgs(allOrgs);
+
+  // Filter out orgs that are not in ORG_ALLOWLIST
   const allowedOrgs = await filterAllowedOrgs(sanitizedOrgs, orgAllowList);
+
   return allowedOrgs;
 }
 
+// Function to filter orgs based on ORG_ALLOWLIST configuration
 export async function filterAllowedOrgs(
   orgs: SanitizedOrgAuthorization[],
   allowList: Set<string>
 ): Promise<SanitizedOrgAuthorization[]> {
+  // Return all orgs if ALLOW_ALL_ORGS is set
   if (allowList.has('ALLOW_ALL_ORGS')) return orgs;
 
+  // Get default orgs for filtering
   const defaultTargetOrg = await getDefaultTargetOrg();
   const defaultTargetDevHub = await getDefaultTargetDevHub();
 
   return orgs.filter((org) => {
+    // Skip orgs without a username
     if (!org.username) return false;
+
+    // Check if org is specifically allowed by username
     if (allowList.has(org.username)) return true;
+
+    // Check if org is allowed by alias
     if (org.aliases?.some((alias) => allowList.has(alias))) return true;
 
+    // If DEFAULT_TARGET_ORG is set, check for a username or alias match
     if (allowList.has('DEFAULT_TARGET_ORG') && defaultTargetOrg?.value) {
       if (org.username === defaultTargetOrg.value) return true;
       if (org.aliases?.includes(defaultTargetOrg.value)) return true;
     }
 
+    // If DEFAULT_TARGET_DEV_HUB is set, check for a username or alias match
     if (allowList.has('DEFAULT_TARGET_DEV_HUB') && defaultTargetDevHub?.value) {
       if (org.username === defaultTargetDevHub.value) return true;
       if (org.aliases?.includes(defaultTargetDevHub.value)) return true;
     }
 
+    // Org not allowed
     return false;
   });
 }
 
+// Helper function to get default config for a property
+// Values are cached based on ConfigInfo path after first retrieval
+// This is to prevent manipulation of the config file after server start
 async function getDefaultConfig(
   property: OrgConfigProperties.TARGET_ORG | OrgConfigProperties.TARGET_DEV_HUB
 ): Promise<OrgConfigInfo | undefined> {
+  // If the directory changes, the ConfigAggregator singleton does not update.
+  // It continues to use the old local or global config instead.
+  // We call clearInstance on the singleton to read the new config.
   await ConfigAggregator.clearInstance();
   const aggregator = await ConfigAggregator.create();
   const config = aggregator.getInfo(property);
+
   const { value, path, key, location } = config;
+
   if (!value || typeof value !== 'string' || !path) return undefined;
+
+  // Return an typed object with only the necessary properties
+  // This reduces assertions and lowers context returned to the LLM
   return { key, location, value, path } as OrgConfigInfo;
 }
 
@@ -165,4 +166,3 @@ export async function getDefaultTargetOrg(): Promise<OrgConfigInfo | undefined> 
 export async function getDefaultTargetDevHub(): Promise<OrgConfigInfo | undefined> {
   return getDefaultConfig(OrgConfigProperties.TARGET_DEV_HUB);
 }
-*/

@@ -1,0 +1,16 @@
+{
+  "servers": {
+    "Salesforce DX": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/packages/mcp/bin/run.js",
+        "--toolsets",
+        "all",
+        "--orgs",
+        "DEFAULT_TARGET_ORG",
+        "--no-telemetry",
+        "--allow-non-ga-tools"
+      ]
+    }
+  }
+}

@@ -28,9 +28,8 @@ A username follows the <name@domain.com> format.
 If the user refers to an org with a string not following that format, it can be a valid alias.
 
 IMPORTANT:
-- **OAuth Mode**: This parameter is IGNORED. Authentication is handled via the OAuth bearer token from the HTTP request. Any value provided here will be disregarded and the authenticated org from the token will be used instead.
-- **CLI Mode Only**: If it is not clear what the username or alias is, run the #get_username tool to resolve it.
-- **CLI Mode Only**: NEVER guess or make-up a username or alias.
+- If it is not clear what the username or alias is, run the #get_username tool to resolve it.
+- NEVER guess or make-up a username or alias.
 `);
 
 export const useToolingApiParam = z.boolean().optional().describe('Use Tooling API for the operation');
