@@ -28,7 +28,7 @@ function getHeaderValue(req: Request, headerName: string): string | undefined {
  * Auth Exemptions (Protocol Discovery/Lifecycle - No User Context Needed):
  * - GET requests (SSE event streams)
  * - Protocol methods: initialize, ping
- * - Discovery operations: tools/list, resources/*, prompts/*
+ * - Discovery operations: tools/list (skipped, no auth), resources/*, prompts/*
  * - Protocol notifications: notifications/* (initialized, cancelled, progress, message)
  *
  * Auth Required (User Operations):
@@ -37,7 +37,7 @@ function getHeaderValue(req: Request, headerName: string): string | undefined {
  * Security:
  * - Tokens are NEVER logged (only their length for debugging)
  * - Returns JSON-RPC 2.0 error responses for auth failures
- * - Each request is isolated (stateless validation)
+ * - Each request is isolated
  *
  * Multi-Tenant:
  * - Each user's OAuth token is validated per-request
@@ -69,8 +69,7 @@ export function salesforceOAuthMiddleware(
   }
 
   // Skip auth ONLY for protocol handshake methods
-  // NOTE: tools/list REQUIRES auth to prevent false positive "authenticated" state
-  // OAuth detection happens via /.well-known endpoint and 401 challenges, NOT via tools/list
+  // NOTE: tools/list is skipped and does not require auth
   const skipAuthMethods = ['initialize', 'ping', 'tools/list'];
 
   // Skip auth for resource/prompt discovery
@@ -87,7 +86,6 @@ export function salesforceOAuthMiddleware(
     return next();
   }
 
-  // Validate Authorization header
   const authHeader = getHeaderValue(req, 'authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {

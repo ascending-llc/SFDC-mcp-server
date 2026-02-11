@@ -9,6 +9,12 @@ import { AuthInfo, Connection } from '@salesforce/core';
 import { getRequestContext } from './request-context.js';
 import type { SalesforceAuthContext } from '../types/auth-context.js';
 
+const DEFAULT_USERINFO_URL = 'https://login.salesforce.com/services/oauth2/userinfo';
+
+if (!process.env.SF_USERINFO_URL) {
+  process.env.SF_USERINFO_URL = DEFAULT_USERINFO_URL;
+}
+
 /**
  * Helper to extract header value from MCP SDK headers.
  * Headers from Express are normalized to Record<string, string | string[]>.
@@ -38,7 +44,7 @@ function getHeaderValue(
 async function deriveInstanceUrlFromToken(accessToken: string): Promise<string> {
   console.error(`[OAuth]  Deriving instance URL from token (slow path - userinfo API call)`);
 
-  const userinfoUrl = 'https://login.salesforce.com/services/oauth2/userinfo';
+  const userinfoUrl = process.env.SF_USERINFO_URL!;
 
   try {
     const response = await fetch(userinfoUrl, {
@@ -100,7 +106,6 @@ export async function getAuthContextFromAsyncLocal(): Promise<SalesforceAuthCont
     return undefined;
   }
 
-  // Extract OAuth access token
   const authHeader = getHeaderValue(headers, 'authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -117,13 +122,11 @@ export async function getAuthContextFromAsyncLocal(): Promise<SalesforceAuthCont
 
   console.error(`[OAuth]  Extracted OAuth token (length: ${accessToken.length} chars)`);
 
-  // Extract or derive instance URL
   let instanceUrl = getHeaderValue(headers, 'x-salesforce-instance-url');
 
   if (instanceUrl) {
     console.error(`[OAuth]  Using instance URL from header: ${instanceUrl}`);
   } else {
-    // Slow path: derive from userinfo API
     instanceUrl = await deriveInstanceUrlFromToken(accessToken);
   }
 
