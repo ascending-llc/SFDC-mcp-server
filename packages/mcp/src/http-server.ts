@@ -15,23 +15,37 @@
  */
 /* eslint-disable no-console */
 
+import cors from 'cors';
 import express from 'express';
+import helmet from 'helmet';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { Toolset } from '@salesforce/mcp-provider-api';
 import { SfMcpServer } from './sf-mcp-server.js';
 import { Services } from './services.js';
 import { registerToolsets } from './utils/registry-utils.js';
 import Cache from './utils/cache.js';
-import cors from 'cors';
-import helmet from 'helmet';
 import { salesforceOAuthMiddleware } from './middleware/oauth-middleware.js';
+import { Telemetry } from './telemetry.js';
+
+type ServerConfig = {
+  name: string;
+  version: string;
+  capabilities?: Record<string, unknown>;
+};
+
+type JsonRpcBody = {
+  jsonrpc?: string;
+  id?: string | number;
+  method?: string;
+  params?: Record<string, unknown>;
+};
 
 /**
  * Create a new MCP server instance for a session
  */
 async function createMcpServer(
-  config: { name: string; version: string; capabilities: any },
-  options: { telemetry?: any },
+  config: ServerConfig,
+  options: { telemetry?: Telemetry },
   toolsets: Array<Toolset | 'all'>,
   tools: string[],
   dynamicTools: boolean,
@@ -53,8 +67,8 @@ async function createMcpServer(
 export async function startHttpServer(options: {
   host: string;
   port: number;
-  config: any;
-  telemetry?: any;
+  config: ServerConfig;
+  telemetry?: Telemetry;
   toolsets: Array<Toolset | 'all'>;
   tools: string[];
   dynamicTools: boolean;
@@ -73,7 +87,7 @@ export async function startHttpServer(options: {
   // Request logging middleware with auth logging
   app.use((req, _res, next) => {
     const timestamp = new Date().toISOString();
-    console.error(`[${timestamp}] ${req.method} ${req.path} - Session: ${req.headers['mcp-session-id'] || 'none'}`);
+    console.error(`[${timestamp}] ${req.method} ${req.path} - Session: ${String(req.headers['mcp-session-id'] ?? 'none')}`);
 
     // Log OAuth token presence (never log the actual token)
     const authHeader = req.headers['authorization'];
@@ -87,7 +101,7 @@ export async function startHttpServer(options: {
 
   // STATELESS MODE: Pre-create server and transport at startup
   console.error('[HTTP] Creating stateless server and transport...');
-  
+
   // Clear tool cache
   await Cache.safeSet('tools', []);
   await Cache.safeSet('allowedOrgs', options.allowedOrgs);
@@ -125,7 +139,7 @@ export async function startHttpServer(options: {
       transport: 'streamable-http-stateless',
       mode: 'stateless'
     };
-    console.error(`[HTTP] Health check - stateless mode`);
+    console.error('[HTTP] Health check - stateless mode');
     res.json(healthData);
   });
 
@@ -136,7 +150,7 @@ export async function startHttpServer(options: {
       transport: 'streamable-http-stateless',
       mode: 'stateless'
     };
-    console.error(`[HTTP] Health check (POST) - stateless mode`);
+    console.error('[HTTP] Health check (POST) - stateless mode');
     res.json(healthData);
   });
 
@@ -144,11 +158,11 @@ export async function startHttpServer(options: {
   // Tells clients that this server requires OAuth and where to get tokens
   // IMPORTANT: If client already has a Bearer token, return 404 to skip OAuth discovery
   // This allows VS Code/clients with static tokens to use them instead of starting OAuth flow
-  // 
+  //
   // NOTE: This handler is registered at BOTH root and /mcp paths to support:
   //   - Direct connections: /.well-known/oauth-protected-resource
   //   - Gateway proxying: /mcp/.well-known/oauth-protected-resource
-  const oauthDiscoveryHandler = (req: express.Request, res: express.Response) => {
+  const oauthDiscoveryHandler = (req: express.Request, res: express.Response): void => {
     const authHeader = req.headers['authorization'];
 
     // If client already has a Bearer token, return 404 to indicate OAuth isn't needed
@@ -158,13 +172,14 @@ export async function startHttpServer(options: {
       console.error('[OAuth Discovery] Client already has Bearer token - skipping OAuth discovery');
       console.error('[OAuth Discovery] Returning 404 to use existing token');
       console.error('[OAuth Discovery] ════════════════════════════════════════');
-      return res.status(404).json({
+      res.status(404).json({
         error: 'not_found',
         error_description: 'OAuth discovery not needed - Bearer token already provided'
       });
+      return;
     }
 
-    const salesforceAuthServer = process.env.SF_LOGIN_URL || 'https://login.salesforce.com';
+    const salesforceAuthServer = process.env.SF_LOGIN_URL ?? 'https://login.salesforce.com';
 
     // Use localhost for resource URL instead of 0.0.0.0 (which is not a valid client URL)
     const resourceHost = options.host === '0.0.0.0' ? 'localhost' : options.host;
@@ -180,7 +195,7 @@ export async function startHttpServer(options: {
     console.error('[OAuth Discovery] ════════════════════════════════════════');
     console.error('[OAuth Discovery] RFC 9728 metadata requested');
     console.error('[OAuth Discovery] Path:', req.path);
-    console.error('[OAuth Discovery] Client:', req.headers['user-agent'] || 'unknown');
+    console.error('[OAuth Discovery] Client:', req.headers['user-agent'] ?? 'unknown');
     console.error('[OAuth Discovery] Returning:', JSON.stringify(metadata, null, 2));
     console.error('[OAuth Discovery] ════════════════════════════════════════');
 
@@ -195,13 +210,15 @@ export async function startHttpServer(options: {
 
   // Main MCP endpoint - handles POST (requests) in stateless mode
   // OAuth middleware validates Bearer token for tool calls (skips initialize/ping/tools/list)
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises, complexity
   app.all('/mcp', salesforceOAuthMiddleware, async (req, res) => {
+    const body = req.body as JsonRpcBody | undefined;
     try {
       // Log ALL incoming requests with method for debugging
       console.error(`[HTTP] ════ Incoming ${req.method} /mcp ════`);
-      console.error(`[HTTP]   Accept: ${req.headers.accept || 'none'}`);
-      console.error(`[HTTP]   Content-Type: ${req.headers['content-type'] || 'none'}`);
-      console.error(`[HTTP]   Session: ${req.headers['mcp-session-id'] || 'none'}`);
+      console.error(`[HTTP]   Accept: ${String(req.headers.accept ?? 'none')}`);
+      console.error(`[HTTP]   Content-Type: ${String(req.headers['content-type'] ?? 'none')}`);
+      console.error(`[HTTP]   Session: ${String(req.headers['mcp-session-id'] ?? 'none')}`);
 
       // Handle OPTIONS requests (CORS preflight)
       if (req.method === 'OPTIONS') {
@@ -216,7 +233,7 @@ export async function startHttpServer(options: {
           jsonrpc: '2.0',
           id: 'server-error',
           error: {
-            code: -32600,
+            code: -32_600,
             message: 'Method Not Allowed: DELETE not supported in stateless mode'
           }
         });
@@ -229,7 +246,7 @@ export async function startHttpServer(options: {
         const authHeader = req.headers['authorization'];
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
           console.error('[OAuth Detection] No auth header - returning 401 challenge');
-          const baseUrl = `http://${req.get('host')}`;
+          const baseUrl = `http://${String(req.get('host') ?? 'localhost')}`;
           const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
           console.error('[OAuth Detection] WWW-Authenticate:', wwwAuth);
           console.error('[OAuth Detection] ════════════════════════════════════════');
@@ -247,7 +264,7 @@ export async function startHttpServer(options: {
       // The TypeScript MCP SDK returns error responses WITHOUT Content-Type header,
       // which causes nginx to return 502 Bad Gateway. By validating here, we can
       // return proper JSON responses with Content-Type that nginx can proxy.
-      const acceptHeader = req.headers.accept || '';
+      const acceptHeader = req.headers.accept ?? '';
 
       if (req.method === 'GET') {
         // GET requests must accept text/event-stream for SSE
@@ -258,7 +275,7 @@ export async function startHttpServer(options: {
             jsonrpc: '2.0',
             id: 'server-error',
             error: {
-              code: -32600,
+              code: -32_600,
               message: 'Not Acceptable: Client must accept text/event-stream'
             }
           });
@@ -291,7 +308,7 @@ export async function startHttpServer(options: {
           } else {
             clearInterval(keepaliveInterval);
           }
-        }, 30000);
+        }, 30_000);
 
         // Clean up interval when connection closes
         res.on('close', () => {
@@ -317,21 +334,21 @@ export async function startHttpServer(options: {
             jsonrpc: '2.0',
             id: 'server-error',
             error: {
-              code: -32600,
+              code: -32_600,
               message: 'Not Acceptable: Client must accept both application/json and text/event-stream'
             }
           });
         }
 
         // POST requests must have Content-Type: application/json
-        const contentType = req.headers['content-type'] || '';
+        const contentType = req.headers['content-type'] ?? '';
         if (!contentType.includes('application/json')) {
           console.error('[HTTP] POST request missing Content-Type: application/json');
           return res.status(415).json({
             jsonrpc: '2.0',
             id: 'server-error',
             error: {
-              code: -32600,
+              code: -32_600,
               message: 'Unsupported Media Type: Content-Type must be application/json'
             }
           });
@@ -345,20 +362,20 @@ export async function startHttpServer(options: {
           jsonrpc: '2.0',
           id: 'server-error',
           error: {
-            code: -32600,
+            code: -32_600,
             message: `Method Not Allowed: ${req.method} not supported`
           }
         });
       }
 
       // Log MCP method calls
-      if (req.body?.method) {
-        const method = req.body.method;
-        const params = req.body.params;
+      if (body?.method) {
+        const method = body.method;
+        const params = body.params;
         if (method === 'tools/list') {
-          console.error(`[HTTP]  Stateless: tools/list`);
+          console.error('[HTTP]  Stateless: tools/list');
         } else if (method === 'tools/call') {
-          const toolName = params?.name || 'unknown';
+          const toolName = (params?.name as string) ?? 'unknown';
           console.error(`[HTTP]  Stateless: tools/call -> ${toolName}`);
         } else {
           console.error(`[HTTP]  Stateless: ${method}`);
@@ -369,8 +386,8 @@ export async function startHttpServer(options: {
       // The TypeScript SDK returns 202 without Content-Type, which causes nginx 502.
       // Notifications are fire-and-forget, so we just acknowledge receipt.
       // We handle this ourselves instead of passing to transport to ensure proper headers.
-      if (req.body?.method && req.body?.id === undefined) {
-        console.error(`[HTTP] Notification detected: ${req.body.method} - returning 202 with proper headers`);
+      if (body?.method && body?.id === undefined) {
+        console.error(`[HTTP] Notification detected: ${body.method} - returning 202 with proper headers`);
         return res.status(202).set('Content-Type', 'application/json').end();
       }
 
@@ -383,11 +400,11 @@ export async function startHttpServer(options: {
         res.status(500).json({
           jsonrpc: '2.0',
           error: {
-            code: -32603,
+            code: -32_603,
             message: 'Internal error',
             data: error instanceof Error ? error.message : String(error)
           },
-          id: req.body?.id ?? null
+          id: body?.id ?? null
         });
       }
     }
@@ -399,7 +416,7 @@ export async function startHttpServer(options: {
       console.error(` Salesforce MCP Server v${options.config.version} running on http://${options.host}:${options.port}`);
       console.error(`   Health check: http://${options.host}:${options.port}/`);
       console.error(`   MCP endpoint: http://${options.host}:${options.port}/mcp`);
-      console.error(`   Transport: StreamableHTTP with SSE (stateless)`);
+      console.error('   Transport: StreamableHTTP with SSE (stateless)');
       resolve();
     });
 

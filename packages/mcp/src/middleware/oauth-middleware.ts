@@ -62,12 +62,15 @@ export function salesforceOAuthMiddleware(
   // Skip auth for GET requests (SSE streams)
   if (req.method === 'GET') {
     console.error('[OAuth Middleware] [OAUTH-DEBUG] Skipping auth for GET request (SSE stream)');
-    console.error(`[OAuth Middleware] [OAUTH-DEBUG] GET headers: session=${req.headers['mcp-session-id']}, auth=${req.headers['authorization'] ? 'present' : 'MISSING'}`);
+    const sessionId = String(req.headers['mcp-session-id'] ?? '');
+    const hasAuth = req.headers['authorization'] ? 'present' : 'MISSING';
+    console.error(`[OAuth Middleware] [OAUTH-DEBUG] GET headers: session=${sessionId}, auth=${hasAuth}`);
     return next();
   }
 
-  const requestId = req.body?.id ?? 'unknown';
-  const method = req.body?.method;
+  const body = req.body as Record<string, unknown> | undefined;
+  const requestId = String(body?.id ?? 'unknown');
+  const method = typeof body?.method === 'string' ? body.method : '';
 
   console.error(`[OAuth Middleware] [Request ${requestId}]  Validating auth for method: ${method || 'undefined'}`);
 
@@ -83,13 +86,10 @@ export function salesforceOAuthMiddleware(
   const skipAuthMethods = ['initialize', 'ping', 'tools/list'];
 
   // Skip auth for resource/prompt discovery
-  const isListOperation = method && (
-    method.startsWith('resources/') ||  // resources/list, resources/templates/list, etc.
-    method.startsWith('prompts/')       // prompts/list, prompts/get, etc.
-  );
+  const isListOperation = method.startsWith('resources/') || method.startsWith('prompts/');
 
   // Skip auth for all notification methods (protocol lifecycle)
-  const isNotification = method?.startsWith('notifications/');
+  const isNotification = method.startsWith('notifications/');
 
   if (skipAuthMethods.includes(method) || isListOperation || isNotification) {
     console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for method: ${method}`);
@@ -101,7 +101,7 @@ export function salesforceOAuthMiddleware(
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.error(`[OAuth Middleware] [Request ${requestId}]  Missing or invalid Authorization header`);
 
-    const baseUrl = `http://${req.get('host')}`;
+    const baseUrl = `http://${req.get('host') ?? 'localhost'}`;
     const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required. To resolve: authenticate via your MCP client. Your client should redirect to Salesforce OAuth.", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
 
     console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized (LibreChat OAuth detection)`);
@@ -114,14 +114,14 @@ export function salesforceOAuthMiddleware(
     res.status(401);
     res.setHeader('WWW-Authenticate', wwwAuth);
     res.setHeader('Content-Type', 'application/json');
-    const body = JSON.stringify({
+    const responseBody = JSON.stringify({
       code: 401,
       message: 'Unauthorized: invalid_token - OAuth authentication required',
       error: 'invalid_token',
       error_description: 'OAuth authentication required'
     });
-    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] Sending body: ${body}`);
-    res.end(body);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] Sending body: ${responseBody}`);
+    res.end(responseBody);
     console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] 401 response sent and ended`);
     return;
   }

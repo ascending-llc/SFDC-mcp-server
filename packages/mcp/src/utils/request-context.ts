@@ -18,10 +18,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 
-export interface RequestContext {
+export type RequestContext = {
   extra: RequestHandlerExtra<ServerRequest, ServerNotification>;
   transportMode: 'http' | 'stdio';
-}
+};
 
 export const requestContextStorage = new AsyncLocalStorage<RequestContext>();
 
@@ -34,13 +34,8 @@ export function runWithContext<T>(
   fn: () => T | Promise<T>
 ): Promise<T> {
   return new Promise((resolve, reject) => {
-    requestContextStorage.run(context, async () => {
-      try {
-        const result = await fn();
-        resolve(result);
-      } catch (error) {
-        reject(error);
-      }
+    requestContextStorage.run(context, () => {
+      void Promise.resolve(fn()).then(resolve, reject);
     });
   });
 }
@@ -65,10 +60,11 @@ export function runWithContext<T>(
  * Call this function early in server startup (index.ts or http-server.ts).
  */
 export function installChdirShim(): void {
-  const originalChdir = process.chdir;
+  const originalChdir = process.chdir.bind(process);
 
   // Store original for potential restoration
-  (process as any).__originalChdir = originalChdir;
+  // eslint-disable-next-line no-underscore-dangle, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
+  (process as any).originalChdir = originalChdir;
 
   // Replace with no-op shim
   process.chdir = function shimmedChdir(directory: string | URL): void {
@@ -80,5 +76,5 @@ export function installChdirShim(): void {
     return;
   };
 
-  console.error(`[Chdir Shim]  Installed chdir shim (OAuth-only mode)`);
+  console.error('[Chdir Shim]  Installed chdir shim (OAuth-only mode)');
 }

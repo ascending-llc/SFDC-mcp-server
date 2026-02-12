@@ -25,7 +25,7 @@
  * - No shared state between users
  * - Stored in AsyncLocalStorage for the duration of the request
  */
-export interface SalesforceAuthContext {
+export type SalesforceAuthContext = {
   /**
    * Salesforce OAuth access token.
    * Extracted from Authorization: Bearer <token> header.
@@ -46,4 +46,4 @@ export interface SalesforceAuthContext {
    * Optional - extracted from userinfo API if needed.
    */
   userId?: string;
-}
+};

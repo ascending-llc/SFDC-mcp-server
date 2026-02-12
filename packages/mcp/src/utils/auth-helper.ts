@@ -178,7 +178,7 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
 
   console.error('[OAuth] ════════════════════════════════════════');
   console.error('[OAuth] Creating OAuth connection');
-  console.error(`[OAuth] Instance URL: ${authContext.instanceUrl}`);
+  console.error(`[OAuth] Instance URL: ${authContext.instanceUrl ?? 'unknown'}`);
   console.error(`[OAuth] Token length: ${authContext.accessToken.length} chars`);
 
   try {
@@ -193,8 +193,8 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
     const connection = await Connection.create({ authInfo });
 
     console.error('[OAuth]  OAuth connection created successfully');
-    console.error(`[OAuth]  Org ID: ${connection.getAuthInfoFields().orgId}`);
-    console.error(`[OAuth]  Username: ${connection.getUsername()}`);
+    console.error(`[OAuth]  Org ID: ${connection.getAuthInfoFields().orgId ?? 'unknown'}`);
+    console.error(`[OAuth]  Username: ${connection.getUsername() ?? 'unknown'}`);
     console.error('[OAuth] ════════════════════════════════════════');
     return connection;
   } catch (error) {
