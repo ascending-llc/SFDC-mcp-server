@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+/* eslint-disable no-console */
 
 import { AuthInfo, Connection } from '@salesforce/core';
-import { getRequestContext } from './request-context.js';
 import type { SalesforceAuthContext } from '../types/auth-context.js';
+import { getRequestContext } from './request-context.js';
 
 const DEFAULT_USERINFO_URL = 'https://login.salesforce.com/services/oauth2/userinfo';
 
@@ -51,7 +52,7 @@ function getHeaderValue(
  * @returns Instance URL (e.g., "https://na1.salesforce.com")
  */
 async function deriveInstanceUrlFromToken(accessToken: string): Promise<string> {
-  console.error(`[OAuth]  Deriving instance URL from token (slow path - userinfo API call)`);
+  console.error('[OAuth]  Deriving instance URL from token (slow path - userinfo API call)');
 
   const userinfoUrl = process.env.SF_USERINFO_URL!;
 
@@ -101,7 +102,7 @@ export async function getAuthContextFromAsyncLocal(): Promise<SalesforceAuthCont
   const ctx = getRequestContext();
 
   if (!ctx) {
-    console.error(`[OAuth]   No request context found in AsyncLocalStorage`);
+    console.error('[OAuth]   No request context found in AsyncLocalStorage');
     return undefined;
   }
 
@@ -111,21 +112,21 @@ export async function getAuthContextFromAsyncLocal(): Promise<SalesforceAuthCont
   const headers = ctx.extra?.requestInfo?.headers as Record<string, string | string[]> | undefined;
 
   if (!headers) {
-    console.error(`[OAuth]   No headers found in request context`);
+    console.error('[OAuth]   No headers found in request context');
     return undefined;
   }
 
   const authHeader = getHeaderValue(headers, 'authorization');
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    console.error(`[OAuth]   No Bearer token found in Authorization header`);
+    console.error('[OAuth]   No Bearer token found in Authorization header');
     return undefined;
   }
 
   const accessToken = authHeader.substring(7).trim();
 
   if (!accessToken) {
-    console.error(`[OAuth]   Authorization header has empty Bearer token`);
+    console.error('[OAuth]   Authorization header has empty Bearer token');
     return undefined;
   }
 
@@ -171,12 +172,12 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
   const authContext = await getAuthContextFromAsyncLocal();
 
   if (!authContext) {
-    console.error(`[OAuth]   Cannot create OAuth connection - no auth context available`);
+    console.error('[OAuth]   Cannot create OAuth connection - no auth context available');
     return undefined;
   }
 
   console.error('[OAuth] ════════════════════════════════════════');
-  console.error(`[OAuth] Creating OAuth connection`);
+  console.error('[OAuth] Creating OAuth connection');
   console.error(`[OAuth] Instance URL: ${authContext.instanceUrl}`);
   console.error(`[OAuth] Token length: ${authContext.accessToken.length} chars`);
 
@@ -191,7 +192,7 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
 
     const connection = await Connection.create({ authInfo });
 
-    console.error(`[OAuth]  OAuth connection created successfully`);
+    console.error('[OAuth]  OAuth connection created successfully');
     console.error(`[OAuth]  Org ID: ${connection.getAuthInfoFields().orgId}`);
     console.error(`[OAuth]  Username: ${connection.getUsername()}`);
     console.error('[OAuth] ════════════════════════════════════════');

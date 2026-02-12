@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -133,8 +133,8 @@ EXAMPLE USAGE:
       // Check for cross-reference error (recordId doesn't match objectType)
       if (e.message?.includes('INVALID_CROSS_REFERENCE_KEY')) {
         return textResponse(
-          `Error: The record ID "${input.recordId}" does not appear to be a valid ${input.objectType} record. ` +
-          `Salesforce record IDs have prefixes that identify the object type. ` +
+          `Error: The record ID '${input.recordId}' does not appear to be a valid ${input.objectType} record. ` +
+          'Salesforce record IDs have prefixes that identify the object type. ' +
           `Please verify the record ID belongs to a ${input.objectType} record.`,
           true
         );

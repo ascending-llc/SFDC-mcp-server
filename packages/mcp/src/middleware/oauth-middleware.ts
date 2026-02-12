@@ -1,9 +1,19 @@
 /*
- * Copyright (c) 2024, Salesforce, Inc.
- * All rights reserved.
- * SPDX-License-Identifier: BSD-3-Clause
- * For full license text, see the LICENSE file in the repo root or https://opensource.org/licenses/BSD-3-Clause
+ * Copyright 2026, Salesforce, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+/* eslint-disable no-console */
 
 import { Request, Response, NextFunction } from 'express';
 
@@ -51,7 +61,7 @@ export function salesforceOAuthMiddleware(
 ): void | Response {
   // Skip auth for GET requests (SSE streams)
   if (req.method === 'GET') {
-    console.error(`[OAuth Middleware] [OAUTH-DEBUG] Skipping auth for GET request (SSE stream)`);
+    console.error('[OAuth Middleware] [OAUTH-DEBUG] Skipping auth for GET request (SSE stream)');
     console.error(`[OAuth Middleware] [OAUTH-DEBUG] GET headers: session=${req.headers['mcp-session-id']}, auth=${req.headers['authorization'] ? 'present' : 'MISSING'}`);
     return next();
   }
@@ -79,7 +89,7 @@ export function salesforceOAuthMiddleware(
   );
 
   // Skip auth for all notification methods (protocol lifecycle)
-  const isNotification = method && method.startsWith('notifications/');
+  const isNotification = method?.startsWith('notifications/');
 
   if (skipAuthMethods.includes(method) || isListOperation || isNotification) {
     console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for method: ${method}`);

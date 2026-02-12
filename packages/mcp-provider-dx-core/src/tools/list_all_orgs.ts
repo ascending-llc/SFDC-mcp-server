@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,11 +85,11 @@ List all orgs`,
   ): Promise<CallToolResult> {
     if (isHttpTransport(extra)) {
       return textResponse(
-        `**OAuth Mode Active**\n\n` +
-        `You're connected to a single Salesforce org via bearer token. There are no multiple orgs to list.\n\n` +
-        `**Important:** The \`usernameOrAlias\` parameter in other tools does NOT matter in OAuth mode - ` +
-        `any value you provide will be ignored. The authenticated org from your token is used automatically.\n\n` +
-        `Just proceed with your tool calls.`
+        '**OAuth Mode Active**\n\n' +
+        'You\'re connected to a single Salesforce org via bearer token. There are no multiple orgs to list.\n\n' +
+        '**Important:** The `usernameOrAlias` parameter in other tools does NOT matter in OAuth mode - ' +
+        'any value you provide will be ignored. The authenticated org from your token is used automatically.\n\n' +
+        'Just proceed with your tool calls.'
       );
     }
 

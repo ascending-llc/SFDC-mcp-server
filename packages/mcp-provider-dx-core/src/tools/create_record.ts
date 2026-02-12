@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ EXAMPLE USAGE:
       process.chdir(input.directory);
 
       const connection = await this.services.getOrgService().getConnection(input.usernameOrAlias);
-      const result = await connection.sobject(input.objectType).create(input.fields as Record<string, unknown>);
+      const result = await connection.sobject(input.objectType).create(input.fields);
 
       // SaveResult is a discriminated union - must check success === false
       if (result.success === false) {

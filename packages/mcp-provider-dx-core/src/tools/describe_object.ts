@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -125,8 +125,8 @@ EXAMPLE USAGE:
           ...(field.picklistValues && field.picklistValues.length > 0
             ? {
                 picklistValues: field.picklistValues
-                  .filter((pv) => pv.active)
-                  .map((pv) => ({ value: pv.value, label: pv.label })),
+                  .filter((pv: { active: boolean }) => pv.active)
+                  .map((pv: { value: string; label: string }) => ({ value: pv.value, label: pv.label })),
               }
             : {}),
           ...(field.referenceTo && field.referenceTo.length > 0

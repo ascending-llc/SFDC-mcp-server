@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -57,18 +57,9 @@ export function sanitizePath(projectPath: string): boolean {
   return !hasTraversal && isAbsolute;
 }
 
-/**
- * Detects if the current request is coming through HTTP transport (OAuth mode).
- * In HTTP mode, extra.requestInfo.headers is populated by the MCP SDK.
- * In stdio mode (CLI), headers are not present.
- *
- * Alternative (stricter Bearer token check) if this proves unreliable:
- *   const headers = extra?.requestInfo?.headers as Record<string, string | string[]> | undefined;
- *   const authHeader = headers?.['authorization'];
- *   return !!(authHeader && (typeof authHeader === 'string'
- *     ? authHeader.startsWith('Bearer ')
- *     : authHeader[0]?.startsWith('Bearer ')));
- */
+// Detects if the current request is coming through HTTP transport (OAuth mode).
+// In HTTP mode, extra.requestInfo.headers is populated by the MCP SDK.
+// In stdio mode (CLI), headers are not present.
 export function isHttpTransport(
   extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
 ): boolean {
