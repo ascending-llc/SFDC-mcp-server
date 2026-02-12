@@ -118,7 +118,7 @@ EXAMPLE USAGE:
 
       // Build SOSL query
       // Escape special SOSL characters in search term
-      const escapedSearchTerm = input.searchTerm.replace(/[?&|!{}[\]()^~*:\\"-]/g, '\\$&');
+      const escapedSearchTerm = input.searchTerm.replace(/[?&|!{}\[\]()^~*:\\"-]/g, '\\$&');
 
       let soslQuery: string;
       if (input.objects && input.objects.length > 0) {

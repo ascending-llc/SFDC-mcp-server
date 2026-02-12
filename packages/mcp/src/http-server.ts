@@ -184,8 +184,9 @@ export async function startHttpServer(options: {
     // Use localhost for resource URL instead of 0.0.0.0 (which is not a valid client URL)
     const resourceHost = options.host === '0.0.0.0' ? 'localhost' : options.host;
 
+    const scheme = req.protocol ?? 'http';
     const metadata = {
-      resource: `http://${resourceHost}:${options.port}`,
+      resource: `${scheme}://${resourceHost}:${options.port}`,
       authorization_servers: [salesforceAuthServer],
       scopes_supported: ['full'],
       bearer_methods_supported: ['header'],
@@ -239,14 +240,15 @@ export async function startHttpServer(options: {
         });
       }
 
-      // Handle HEAD requests for OAuth detection (LibreChat 401 Challenge Method)
+      // Handle HEAD requests for OAuth detection
       if (req.method === 'HEAD') {
         console.error('[OAuth Detection] ════════════════════════════════════════');
         console.error('[OAuth Detection] HEAD request for 401 challenge detection');
         const authHeader = req.headers['authorization'];
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
           console.error('[OAuth Detection] No auth header - returning 401 challenge');
-          const baseUrl = `http://${String(req.get('host') ?? 'localhost')}`;
+          const scheme = req.protocol ?? 'http';
+          const baseUrl = `${scheme}://${String(req.get('host') ?? 'localhost')}`;
           const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
           console.error('[OAuth Detection] WWW-Authenticate:', wwwAuth);
           console.error('[OAuth Detection] ════════════════════════════════════════');

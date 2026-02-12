@@ -64,7 +64,7 @@ export function installChdirShim(): void {
 
   // Store original for potential restoration
   // eslint-disable-next-line no-underscore-dangle, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any
-  (process as any).originalChdir = originalChdir;
+  (process as any).__originalChdir = originalChdir;
 
   // Replace with no-op shim
   process.chdir = function shimmedChdir(directory: string | URL): void {

@@ -97,7 +97,7 @@ jobs:
             aws eks update-kubeconfig --name ${{ env.SAAS_EKS_CLUSTER_NAME }} --region ${{ inputs.region }}
           fi
             
-      - name: Sync librechat env variables
+      - name: Sync env variables
         env:
           AWS_REGION: ${{ inputs.region }}
           APP_NAME: ${{ inputs.application }}

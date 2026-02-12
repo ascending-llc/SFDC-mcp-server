@@ -119,16 +119,16 @@ You can also use special values to control access to orgs:
     }),
     'api-only': Flags.boolean({
       summary: 'Only register tools that work with API calls (no file system or CLI dependencies)',
-      description: `When enabled, only tools marked with ExecutionMode.API_ONLY will be registered.
-This is useful for cloud/serverless deployments where file system and CLI access is not available.
-Tools requiring workspace access or CLI binaries will be skipped.`,
+      description: `When enabled, only tools from the API-safe tool list will be registered.
+This list contains tools that rely solely on remote APIs and do not require local file system or CLI access.
+Other tools will be skipped, which is useful for cloud/serverless deployments where local resources are unavailable.`,
     }),
     transport: Flags.option({
       options: ['stdio', 'http'] as const,
       summary: 'Transport mode for the MCP server',
       description: `Choose how the server communicates:
 - stdio: Standard input/output (default, for Claude Desktop)
-- http: HTTP server mode (for LibreChat/Jarvis integration)`,
+- http: HTTP server mode`,
       default: 'stdio',
     })(),
     'http-host': Flags.string({
@@ -167,7 +167,7 @@ Tools requiring workspace access or CLI binaries will be skipped.`,
       command: '<%= config.bin %> --toolsets all --orgs DEFAULT_TARGET_ORG --allow-non-ga-tools',
     },
     {
-      description: 'Start the server in HTTP mode for LibreChat/Jarvis integration',
+      description: 'Start the server in HTTP mode',
       command: '<%= config.bin %> --transport http --toolsets all --orgs DEFAULT_TARGET_ORG',
     },
     {

@@ -193,8 +193,6 @@ export async function createOAuthConnection(): Promise<Connection | undefined> {
     const connection = await Connection.create({ authInfo });
 
     console.error('[OAuth]  OAuth connection created successfully');
-    console.error(`[OAuth]  Org ID: ${connection.getAuthInfoFields().orgId ?? 'unknown'}`);
-    console.error(`[OAuth]  Username: ${connection.getUsername() ?? 'unknown'}`);
     console.error('[OAuth] ════════════════════════════════════════');
     return connection;
   } catch (error) {

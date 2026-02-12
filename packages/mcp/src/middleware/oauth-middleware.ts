@@ -46,7 +46,6 @@ function getHeaderValue(req: Request, headerName: string): string | undefined {
  *
  * Security:
  * - Tokens are NEVER logged (only their length for debugging)
- * - Returns JSON-RPC 2.0 error responses for auth failures
  * - Each request is isolated
  *
  * Multi-Tenant:
@@ -75,7 +74,6 @@ export function salesforceOAuthMiddleware(
   console.error(`[OAuth Middleware] [Request ${requestId}]  Validating auth for method: ${method || 'undefined'}`);
 
   // Skip auth for POST requests with no method (OAuth detection probes)
-  // LibreChat sends POST with empty body {} to detect OAuth requirement
   if (!method) {
     console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for empty/invalid request (OAuth detection)`);
     return next();
@@ -101,16 +99,17 @@ export function salesforceOAuthMiddleware(
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.error(`[OAuth Middleware] [Request ${requestId}]  Missing or invalid Authorization header`);
 
-    const baseUrl = `http://${req.get('host') ?? 'localhost'}`;
+    const forwardedProto = getHeaderValue(req, 'x-forwarded-proto');
+    const protocol = forwardedProto?.split(',')[0].trim() ?? req.protocol;
+    const baseUrl = `${protocol}://${req.get('host') ?? 'localhost'}`;
     const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required. To resolve: authenticate via your MCP client. Your client should redirect to Salesforce OAuth.", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
 
-    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized (LibreChat OAuth detection)`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized`);
     console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] HTTP method: ${req.method}, MCP method: ${method}`);
     console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] About to send 401 response...`);
 
-    // Return error format that matches LibreChat's isOAuthError() checks:
-    // - code: 401 or 403
-    // - message containing: '401', 'invalid_token', 'unauthorized', 'authentication required'
+    // Return error format code: 401 or 403
+    // message containing: '401', 'invalid_token', 'unauthorized', 'authentication required'
     res.status(401);
     res.setHeader('WWW-Authenticate', wwwAuth);
     res.setHeader('Content-Type', 'application/json');
@@ -131,7 +130,7 @@ export function salesforceOAuthMiddleware(
 
   if (!accessToken) {
     console.error(`[OAuth Middleware] [Request ${requestId}]  Empty Bearer token`);
-    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized (LibreChat OAuth detection)`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized`);
 
     return res
       .status(401)

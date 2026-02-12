@@ -47,7 +47,6 @@ USER app
 EXPOSE 3336
 
 ENTRYPOINT ["node", "packages/mcp/bin/run.js"]
-# Default: OAuth-only HTTP mode for LibreChat integration
 # --api-only ensures only API-based tools are registered (no file system/CLI dependencies)
 # --allow-non-ga-tools enables NON_GA tools that are also API-only (e.g., DevOps Center tools)
 # Override flags at `docker run` if needed
