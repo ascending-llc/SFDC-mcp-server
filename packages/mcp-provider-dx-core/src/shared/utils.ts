@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 /* eslint-disable no-console */
 
 import path from 'node:path';
+import { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import { ServerRequest, ServerNotification } from '@modelcontextprotocol/sdk/types.js';
 import { type ToolTextResponse } from './types.js';
 
 // TODO: break into two helpers? One for errors and one for success?
@@ -53,4 +55,13 @@ export function sanitizePath(projectPath: string): boolean {
     path.isAbsolute(projectPath) && (process.platform === 'win32' ? !projectPath.startsWith('\\') : true);
 
   return !hasTraversal && isAbsolute;
+}
+
+// Detects if the current request is coming through HTTP transport (OAuth mode).
+// In HTTP mode, extra.requestInfo.headers is populated by the MCP SDK.
+// In stdio mode (CLI), headers are not present.
+export function isHttpTransport(
+  extra?: RequestHandlerExtra<ServerRequest, ServerNotification>
+): boolean {
+  return !!extra?.requestInfo?.headers;
 }

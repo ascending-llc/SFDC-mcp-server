@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,8 @@
 import { AuthInfo, Connection, ConfigAggregator, OrgConfigProperties, type OrgAuthorization } from '@salesforce/core';
 import { type OrgConfigInfo, type SanitizedOrgAuthorization } from '@salesforce/mcp-provider-api';
 import Cache from './cache.js';
+import { createOAuthConnection } from './auth-helper.js';
+import { getRequestContext } from './request-context.js';
 
 /**
  * Sanitizes org authorization data by filtering out sensitive fields
@@ -40,8 +42,20 @@ export function sanitizeOrgs(orgs: OrgAuthorization[]): SanitizedOrgAuthorizatio
 }
 
 // This function is the main entry point for Tools to get an allowlisted Connection
+// Dual-mode: checks AsyncLocalStorage for HTTP/OAuth context first, falls back to CLI auth
 export async function getConnection(username: string): Promise<Connection> {
-  // We get all allowed orgs each call in case the directory has changed (default configs)
+  // Check if we're in HTTP mode via AsyncLocalStorage
+  const context = getRequestContext();
+  if (context?.transportMode === 'http') {
+    const oauthConn = await createOAuthConnection();
+    if (oauthConn) return oauthConn;
+    throw new Error(
+      'OAuth authentication required but no token found in request headers. ' +
+      'Ensure Authorization: Bearer <token> header is provided.'
+    );
+  }
+
+  // CLI mode: use local SF CLI credentials
   const allOrgs = await getAllAllowedOrgs();
   const foundOrg = findOrgByUsernameOrAlias(allOrgs, username);
 

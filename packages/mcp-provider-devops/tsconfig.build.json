@@ -12,7 +12,8 @@
     "moduleResolution": "NodeNext",
     "sourceMap": true,
     "strict": true,
-    "target": "ESNEXT"
+    "target": "ESNEXT",
+    "skipLibCheck": true
   },
   "include": ["./src"],
   "references": [

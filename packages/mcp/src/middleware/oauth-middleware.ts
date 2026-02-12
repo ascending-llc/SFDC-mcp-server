@@ -1,0 +1,150 @@
+/*
+ * Copyright 2026, Salesforce, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+/* eslint-disable no-console */
+
+import { Request, Response, NextFunction } from 'express';
+
+/**
+ * Helper to extract header value from Express request headers.
+ * Express headers can be string | string[] | undefined.
+ * Returns the first value if array, or the string if single value.
+ */
+function getHeaderValue(req: Request, headerName: string): string | undefined {
+  const value = req.headers[headerName.toLowerCase()];
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value;
+}
+
+/**
+ * OAuth middleware for Salesforce MCP Server (HTTP transport).
+ *
+ * Validates that tool execution includes a valid Authorization: Bearer <token> header.
+ *
+ * Auth Exemptions (Protocol Discovery/Lifecycle - No User Context Needed):
+ * - GET requests (SSE event streams)
+ * - Protocol methods: initialize, ping
+ * - Discovery operations: tools/list (skipped, no auth), resources/*, prompts/*
+ * - Protocol notifications: notifications/* (initialized, cancelled, progress, message)
+ *
+ * Auth Required (User Operations):
+ * - Tool execution: tools/call (accesses user's Salesforce org)
+ *
+ * Security:
+ * - Tokens are NEVER logged (only their length for debugging)
+ * - Each request is isolated
+ *
+ * Multi-Tenant:
+ * - Each user's OAuth token is validated per-request
+ * - No shared state between users
+ * - AsyncLocalStorage provides request isolation downstream
+ */
+export function salesforceOAuthMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void | Response {
+  // Skip auth for GET requests (SSE streams)
+  if (req.method === 'GET') {
+    console.error('[OAuth Middleware] [OAUTH-DEBUG] Skipping auth for GET request (SSE stream)');
+    const sessionId = String(req.headers['mcp-session-id'] ?? '');
+    const hasAuth = req.headers['authorization'] ? 'present' : 'MISSING';
+    console.error(`[OAuth Middleware] [OAUTH-DEBUG] GET headers: session=${sessionId}, auth=${hasAuth}`);
+    return next();
+  }
+
+  const body = req.body as Record<string, unknown> | undefined;
+  const requestId = String(body?.id ?? 'unknown');
+  const method = typeof body?.method === 'string' ? body.method : '';
+
+  console.error(`[OAuth Middleware] [Request ${requestId}]  Validating auth for method: ${method || 'undefined'}`);
+
+  // Skip auth for POST requests with no method (OAuth detection probes)
+  if (!method) {
+    console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for empty/invalid request (OAuth detection)`);
+    return next();
+  }
+
+  // Skip auth ONLY for protocol handshake methods
+  // NOTE: tools/list is skipped and does not require auth
+  const skipAuthMethods = ['initialize', 'ping', 'tools/list'];
+
+  // Skip auth for resource/prompt discovery
+  const isListOperation = method.startsWith('resources/') || method.startsWith('prompts/');
+
+  // Skip auth for all notification methods (protocol lifecycle)
+  const isNotification = method.startsWith('notifications/');
+
+  if (skipAuthMethods.includes(method) || isListOperation || isNotification) {
+    console.error(`[OAuth Middleware] [Request ${requestId}]   Skipping auth for method: ${method}`);
+    return next();
+  }
+
+  const authHeader = getHeaderValue(req, 'authorization');
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Missing or invalid Authorization header`);
+
+    const forwardedProto = getHeaderValue(req, 'x-forwarded-proto');
+    const protocol = forwardedProto?.split(',')[0].trim() ?? req.protocol;
+    const baseUrl = `${protocol}://${req.get('host') ?? 'localhost'}`;
+    const wwwAuth = `Bearer error="invalid_token", error_description="OAuth authentication required. To resolve: authenticate via your MCP client. Your client should redirect to Salesforce OAuth.", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
+
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] HTTP method: ${req.method}, MCP method: ${method}`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] About to send 401 response...`);
+
+    // Return error format code: 401 or 403
+    // message containing: '401', 'invalid_token', 'unauthorized', 'authentication required'
+    res.status(401);
+    res.setHeader('WWW-Authenticate', wwwAuth);
+    res.setHeader('Content-Type', 'application/json');
+    const responseBody = JSON.stringify({
+      code: 401,
+      message: 'Unauthorized: invalid_token - OAuth authentication required',
+      error: 'invalid_token',
+      error_description: 'OAuth authentication required'
+    });
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] Sending body: ${responseBody}`);
+    res.end(responseBody);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  [OAUTH-DEBUG] 401 response sent and ended`);
+    return;
+  }
+
+  // Extract token (never log the actual token)
+  const accessToken = authHeader.substring(7).trim();
+
+  if (!accessToken) {
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Empty Bearer token`);
+    console.error(`[OAuth Middleware] [Request ${requestId}]  Returning 401 Unauthorized`);
+
+    return res
+      .status(401)
+      .setHeader('WWW-Authenticate', 'Bearer error="invalid_token", error_description="Bearer token is empty"')
+      .json({
+        code: 401,
+        message: 'Unauthorized: invalid_token - Bearer token is empty',
+        error: 'invalid_token',
+        error_description: 'Bearer token is empty'
+      });
+  }
+
+  // Log success
+  console.error(`[OAuth Middleware] [Request ${requestId}] Bearer token validated`);
+
+  next();
+}

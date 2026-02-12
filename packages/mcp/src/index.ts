@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,8 @@ import { Telemetry } from './telemetry.js';
 import { SfMcpServer } from './sf-mcp-server.js';
 import { registerToolsets } from './utils/registry-utils.js';
 import { Services } from './services.js';
+import { startHttpServer } from './http-server.js';
+import { installChdirShim } from './utils/request-context.js';
 
 /**
  * Sanitizes an array of org usernames by replacing specific orgs with a placeholder.
@@ -115,6 +117,32 @@ You can also use special values to control access to orgs:
     'allow-non-ga-tools': Flags.boolean({
       summary: 'Enable the ability to register tools that are not yet generally available (GA)',
     }),
+    'api-only': Flags.boolean({
+      summary: 'Only register tools that work with API calls (no file system or CLI dependencies)',
+      description: `When enabled, only tools from the API-safe tool list will be registered.
+This list contains tools that rely solely on remote APIs and do not require local file system or CLI access.
+Other tools will be skipped, which is useful for cloud/serverless deployments where local resources are unavailable.`,
+    }),
+    transport: Flags.option({
+      options: ['stdio', 'http'] as const,
+      summary: 'Transport mode for the MCP server',
+      description: `Choose how the server communicates:
+- stdio: Standard input/output (default, for Claude Desktop)
+- http: HTTP server mode`,
+      default: 'stdio',
+    })(),
+    'http-host': Flags.string({
+      summary: 'HTTP server host (only used with --transport http)',
+      description: 'Host address for HTTP server. Defaults to 0.0.0.0 (all interfaces)',
+      default: '0.0.0.0',
+      dependsOn: ['transport'],
+    }),
+    'http-port': Flags.integer({
+      summary: 'HTTP server port (only used with --transport http)',
+      description: 'Port for HTTP server. Can also be set via SF_MCP_HTTP_PORT environment variable',
+      default: 3336,
+      dependsOn: ['transport'],
+    }),
   };
 
   public static examples = [
@@ -138,12 +166,33 @@ You can also use special values to control access to orgs:
       description: 'Allow tools that are not generally available (NON-GA) to be registered with the server',
       command: '<%= config.bin %> --toolsets all --orgs DEFAULT_TARGET_ORG --allow-non-ga-tools',
     },
+    {
+      description: 'Start the server in HTTP mode',
+      command: '<%= config.bin %> --transport http --toolsets all --orgs DEFAULT_TARGET_ORG',
+    },
+    {
+      description: 'Start HTTP server on custom host and port',
+      command: '<%= config.bin %> --transport http --http-host 127.0.0.1 --http-port 8080 --toolsets all --orgs DEFAULT_TARGET_ORG',
+    },
+    {
+      description: 'Start server with only API-based tools (no file system or CLI dependencies)',
+      command: '<%= config.bin %> --transport http --toolsets all --orgs DEFAULT_TARGET_ORG --api-only',
+    },
   ];
 
   private telemetry?: Telemetry;
 
   public async run(): Promise<void> {
     const { flags } = await this.parse(McpServerCommand);
+
+    // Install chdir shim only in HTTP mode - prevents tools from changing directories
+    // in multi-tenant cloud deployment. CLI mode needs real chdir for directory-based config.
+    if (flags.transport === 'http') {
+      installChdirShim();
+      // Enforce api-only in HTTP mode - non-API tools need filesystem/CLI access
+      // which is not available in multi-tenant cloud deployments
+      flags['api-only'] = true;
+    }
 
     if (!flags['no-telemetry']) {
       this.telemetry = new Telemetry(this.config, {
@@ -193,19 +242,54 @@ You can also use special values to control access to orgs:
       },
     });
 
-    await registerToolsets(
-      flags.toolsets ?? [],
-      flags.tools ?? [],
-      flags['dynamic-tools'] ?? false,
-      flags['allow-non-ga-tools'] ?? false,
-      server,
-      services
-    );
+    // Select transport mode
+    if (flags.transport === 'http') {
+      const httpHost = flags['http-host'] ?? process.env.SF_MCP_HTTP_HOST ?? '0.0.0.0';
+      const httpPort = flags['http-port'] ?? parseInt(process.env.SF_MCP_HTTP_PORT ?? '3336', 10);
 
-    const transport = new StdioServerTransport();
-    await server.connect(transport);
-    
-    console.error(`✅ Salesforce MCP Server v${this.config.version} running on stdio`);
+      // HTTP mode: startHttpServer creates its own server and registers tools internally
+      await startHttpServer({
+        host: httpHost,
+        port: httpPort,
+        config: {
+          name: 'sf-mcp-server',
+          version: this.config.version,
+          capabilities: {
+            resources: {},
+            tools: {},
+          }
+        },
+        telemetry: this.telemetry,
+        toolsets: flags.toolsets ?? [],
+        tools: flags.tools ?? [],
+        dynamicTools: flags['dynamic-tools'] ?? false,
+        allowNonGaTools: flags['allow-non-ga-tools'] ?? false,
+        apiOnly: flags['api-only'] ?? false,
+        allowedOrgs: new Set(flags.orgs),
+        services
+      });
+
+      // Keep process alive for HTTP mode
+      await new Promise(() => {
+        // This promise never resolves, keeping the server running
+      });
+    } else {
+      // stdio mode: register tools on the server created above
+      await registerToolsets(
+        flags.toolsets ?? [],
+        flags.tools ?? [],
+        flags['dynamic-tools'] ?? false,
+        flags['allow-non-ga-tools'] ?? false,
+        flags['api-only'] ?? false,
+        server,
+        services
+      );
+
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+
+      console.error(` Salesforce MCP Server v${this.config.version} running on stdio`);
+    }
   }
 
   protected async catch(error: Error): Promise<void> {

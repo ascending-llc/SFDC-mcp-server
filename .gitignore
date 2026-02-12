@@ -50,3 +50,6 @@ node_modules
 /Library
 
 .cursor
+CLAUDE.md
+OAUTH_TROUBLESHOOTING.md
+.env

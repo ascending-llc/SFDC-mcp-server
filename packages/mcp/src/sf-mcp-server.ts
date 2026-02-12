@@ -1,5 +1,5 @@
 /*
- * Copyright 2025, Salesforce, Inc.
+ * Copyright 2026, Salesforce, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import { Logger } from '@salesforce/core';
 import { ZodRawShape } from 'zod';
 import { Telemetry } from './telemetry.js';
 import { RateLimiter, RateLimitConfig, createRateLimiter } from './utils/rate-limiter.js';
+import { runWithContext } from './utils/request-context.js';
 
 type ToolMethodSignatures = {
   tool: McpServer['tool'];
@@ -105,6 +106,9 @@ export class SfMcpServer extends McpServer implements ToolMethodSignatures {
     ): Promise<CallToolResult> => {
       this.logger.debug(`Tool ${name} called`);
 
+      // Detect transport mode: HTTP transport includes requestInfo.headers, stdio does not
+      const transportMode = extra?.requestInfo?.headers ? 'http' : 'stdio';
+
       // Check rate limit before executing tool
       if (this.rateLimiter) {
         const rateLimitResult = this.rateLimiter.checkLimit();
@@ -134,26 +138,35 @@ export class SfMcpServer extends McpServer implements ToolMethodSignatures {
         this.logger.debug(`Tool ${name} rate check passed. Remaining: ${rateLimitResult.remaining}`);
       }
 
-      const startTime = Date.now();
-      const result = await cb(args, extra);
-      const runtimeMs = Date.now() - startTime;
+      // Wrap execution in AsyncLocalStorage context so getConnection() can detect transport mode
+      return runWithContext(
+        {
+          extra,
+          transportMode,
+        },
+        async () => {
+          const startTime = Date.now();
+          const result = await cb(args, extra);
+          const runtimeMs = Date.now() - startTime;
 
-      this.logger.debug(`Tool ${name} completed in ${runtimeMs}ms`);
-      if (result.isError) this.logger.debug(`Tool ${name} errored`);
+          this.logger.debug(`Tool ${name} completed in ${runtimeMs}ms`);
+          if (result.isError) this.logger.debug(`Tool ${name} errored`);
 
-      this.telemetry?.sendEvent('TOOL_CALLED', {
-        name,
-        runtimeMs,
-        // `isError`:
-        // Whether the tool call ended in an error.
-        //
-        // If not set, this is assumed to be false (the call was successful).
-        //
-        // https://modelcontextprotocol.io/specification/2025-06-18/schema#calltoolresult
-        isError: result.isError ?? false,
-      });
+          this.telemetry?.sendEvent('TOOL_CALLED', {
+            name,
+            runtimeMs,
+            // `isError`:
+            // Whether the tool call ended in an error.
+            //
+            // If not set, this is assumed to be false (the call was successful).
+            //
+            // https://modelcontextprotocol.io/specification/2025-06-18/schema#calltoolresult
+            isError: result.isError ?? false,
+          });
 
-      return result;
+          return result;
+        }
+      );
     };
 
     const tool = super.registerTool(name, config, wrappedCb as ToolCallback<InputArgs>);
